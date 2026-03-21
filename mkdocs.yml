@@ -33,6 +33,9 @@ nav:
   - Methodology:
     - CSDLC Process: methodology/process.md
     - Core Values: methodology/core-values.md
+    - Applying CSDLC: methodology/applying-csdlc.md
+    - Lessons Learned: methodology/lessons-learned.md
+    - Open Questions: methodology/open-questions.md
     - Workflow Template: methodology/workflow-template.md
     - Agent Base Template: methodology/agent-base-template.md
   - Projects:
