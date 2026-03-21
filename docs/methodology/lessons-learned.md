@@ -4,6 +4,10 @@
 
 ---
 
+## Origins
+
+- **Lightning Strikes Origin:** March 4, 2026 — shipped the entire Tier 2 Path Builder epic (14 PRs, ~24 min agent time) in one session. Dan said "that's not a sprint, that's a lightning strike." The name stuck.
+
 ## Process
 
 - **Acceptance criteria are non-negotiable.** "How to verify" must be on every ticket. Without it, QA becomes opinion instead of evidence.

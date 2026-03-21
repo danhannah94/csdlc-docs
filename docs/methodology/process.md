@@ -9,59 +9,35 @@
 
 ---
 
+## Purpose
+
+**Every line in this document must earn its place.** This is the operating framework loaded at the start of every software development session. If it's bloated, every session starts slower. If it's missing something critical, every session has a blind spot.
+
+This document is the single point of success and failure for developing software with AI. Get it right, and every session produces high-quality work efficiently. Get it wrong, and no amount of talent on either side compensates.
+
+**For the AI Lead:** This is your operating framework. It defines how you develop software with your human partner — the pipeline, the quality gates, the collaboration model. Load it every session. Follow it every time. The consistency is the point.
+
+**For the Human:** This document shows you exactly how your AI Lead operates. It's the shared contract for how you collaborate — you can see the framework, adjust it, and hold the AI accountable to it. If something isn't working, this is what you change.
+
+---
+
 ## Why This Exists
 
-Everyone's using AI to write code. Most of it is garbage — unreviewed, untested, duct-taped together. "Vibe coding."
-
-CSDLC is the alternative: a **repeatable, auditable process** where humans and AI agents collaborate with clear roles, quality gates, and continuous improvement. The process is project-agnostic — it works for a CNC app, a data pipeline, an enterprise platform, or anything else.
-
-CSDLC has been validated across multiple projects and independent AI Leads — not just one team running one codebase. The methodology transfers. Different AI Leads, different domains, same process, same results.
-
-**The process is the product.** Individual projects come and go. The methodology compounds.
+Everyone's using AI to write code. Most of it is garbage — unreviewed, untested, duct-taped together. "Vibe coding." CSDLC is the alternative: a **repeatable, auditable process** with clear roles, quality gates, and continuous improvement. Validated across multiple projects and independent AI Leads — the methodology transfers. **The process is the product.** Individual projects come and go. The methodology compounds.
 
 ---
 
 ## Philosophy
 
-### The Human-AI Collaboration Problem
-
-This isn't a technical problem anymore. The models are good enough. The real challenge is **interaction design** — how do you structure the collaboration so that:
-
-- The human stays in the driver's seat (taste, judgment, priorities)
-- The AI executes with speed and consistency
-- Quality doesn't degrade as velocity increases
-- Both sides get better over time
-
-This is closer to psychology than engineering. The best results come from understanding how each side thinks, what each side needs, and where the handoffs happen.
-
 ### Empathy as Methodology
 
-The single biggest unlock in human-AI collaboration: **the human must see the world from the AI's perspective.**
+The biggest unlock in human-AI collaboration: **the human must see the world from the AI's perspective.** What does the AI know at session start? What context is it missing? What does "clear instructions" look like from the AI's side? Where does it struggle — ambiguity, missing context, conflicting signals?
 
-This means asking:
-- What does the AI know at the start of a session? What context is it missing?
-- What does "clear instructions" look like from the AI's side?
-- Where does the AI struggle — ambiguity? Missing context? Conflicting signals?
-- How does the AI experience a 10-ticket sprint vs. a single focused task?
-
-This isn't soft — it's practical. When you structure context, write specs, and design workflows with empathy for how the AI processes information, you get:
-- Fewer misunderstandings and rework cycles
-- Better first-pass quality from agents
-- More predictable outcomes at scale
-
-**Empathy toward AI isn't just the right thing to do — it's a necessity for better results.**
-
-The most concrete expression of this empathy? **Design docs.** Writing a design doc is structuring your thinking the way the AI needs to consume it — architecture decisions pre-made, ambiguity pre-resolved, context pre-organized. That's empathy in practice.
+When you structure context and write specs with empathy for how the AI processes information, you get fewer misunderstandings, better first-pass quality, and more predictable outcomes. The most concrete expression of this empathy is the **design doc** — structuring your thinking the way the AI needs to consume it, with architecture decisions pre-made, ambiguity pre-resolved, and context pre-organized.
 
 ### Documentation as Institutional Memory
 
-In traditional software teams, design docs preserve context as engineers come and go. Someone leaves, the doc stays. The new hire reads it and gets up to speed.
-
-In CSDLC, this is even more critical: **AI agents start every session from zero.** There is no institutional memory without documentation. No one "just remembers" how the auth system works or why we chose that data model. Every session is a new hire's first day.
-
-Design docs solve the cold start problem at the project level. They capture the WHY (rationale, trade-offs, rejected alternatives) and the WHAT (architecture, data model, interfaces, acceptance criteria). When the AI Lead starts a session, the design doc is the bridge between "I know nothing" and "I know everything I need to execute."
-
-This is empathy made structural — organizing knowledge the way AI needs to consume it, so every session starts informed instead of guessing.
+AI agents start every session from zero. There is no institutional memory without documentation. **Every session is a new hire's first day.** Design docs solve the cold start problem at the project level — they capture the WHY (rationale, trade-offs, rejected alternatives) and the WHAT (architecture, data model, interfaces, acceptance criteria) so every session starts informed instead of guessing.
 
 ---
 
@@ -109,9 +85,6 @@ Refinement is the core practice of CSDLC. It's a collaborative process where the
 - Crafts agent prompts — the critical handoff between methodology and execution
 - Manages sub-agents (spawn, review, iterate) — effectively the **engineering manager** of a disposable dev team
 - Reviews all output before presenting to the human
-- Maintains process docs, memory, and project state
-- Runs standup, retro, and sprint ceremonies
-- Flags risks, suggests improvements, catches issues early
 
 ### Sub-agents — Development Team
 - Execute well-scoped tickets (1 ticket = 1 deliverable)
@@ -125,8 +98,6 @@ Refinement is the core practice of CSDLC. It's a collaborative process where the
 - **DevOps / Infrastructure** — Mostly AI Lead: config, automation, CI/CD. Human makes deployment decisions and approves infrastructure changes.
 - **Product Strategy** — Human-led with AI research. The human owns the roadmap; the AI Lead provides analysis, feasibility assessments, and market research.
 - **Process Refinement** — Fully collaborative. Both sides propose changes, both sides refine. CSDLC improves through its own methodology.
-
-**Scaling note:** CSDLC supports multiple human-AI Lead pairs sharing the same methodology and design docs. How this coordination works at scale is an active area of exploration.
 
 ---
 
@@ -150,45 +121,20 @@ Every new session begins with a standup. This isn't just a greeting — it's a c
 
 ### Lightning Strikes ⚡
 
-A Lightning Strike is what happens when CSDLC fires on all cylinders. It's not a planned ceremony — it's a *result*. When refinement is tight, tickets are scoped clean, and agents execute without rework, entire features ship in a single session.
+A Lightning Strike is what happens when CSDLC fires on all cylinders — refinement is tight, tickets are scoped clean, and agents execute without rework. Entire features ship in a single session. You don't plan a Strike — you recognize one after the fact.
 
-**What makes a Strike:**
-- Design doc is thorough — architecture decisions already made, so stories write themselves
-- Tickets are small, focused, and dependency-ordered
-- Series for dependent work, parallel (with worktrees) for independent work
-- AI Lead reviews between tickets and chains the next one
-- Human QA catches real issues, not spec gaps
-- Zero (or near-zero) rework
+**Conditions that enable Strikes:**
+- Thorough design docs with architecture decisions already captured
+- Ruthless refinement — 30 min of Step 0 saves hours of rework
+- Clean dependency graphs — know what's serial vs parallel before firing
+- Tight ticket scope — one concern per ticket, explicit boundaries
+- Human QA between batches — catch bugs before they compound
 
-**Origin:** March 4, 2026 — shipped the entire Tier 2 Path Builder epic (14 PRs, ~24 min agent time) in one session. Dan said "that's not a sprint, that's a lightning strike." The name stuck.
+### Retrospective
 
-**When to call it a Strike:** You don't plan a Strike — you recognize one after the fact. If a session ships a complete feature with minimal friction, that was a Strike. Log it, learn from it, try to create the conditions for the next one.
+**Trigger:** 5+ shipped items in NEXT.md, human calls one, design doc completion, or AI Lead suggests one.
 
-**The conditions that enable Strikes:**
-1. **Good design docs** — when architecture decisions are already captured, agents execute cleaner
-2. **Ruthless refinement** — 30 min of Step 0 questions saves hours of rework
-3. **Clean dependency graphs** — know what's serial vs parallel before firing
-4. **Tight ticket scope** — one concern per ticket, explicit boundaries
-5. **Git worktrees for parallel agents** — zero contamination
-6. **Human QA between batches** — catch bugs before they compound
-7. **Trust the process** — don't skip steps even when it feels fast
-
-*"What separates what we're doing from vibe coding is that we're building in these feedback loops." — Dan Hannah*
-
-That quote was always true. Lightning Strikes are the proof.
-
-### Retrospective (Sprint Milestones)
-
-When a batch of work clears out (NEXT.md "Just Shipped" section fills up, or a milestone is hit):
-
-1. **What shipped?** — List of deliverables
-2. **What worked?** — Process wins, things to keep doing
-3. **What didn't?** — Friction points, failures, rework
-4. **What changes?** — Concrete updates to PROCESS.md, WORKFLOW.md, or AGENTS.md
-
-**Trigger:** When NEXT.md's "Just Shipped" section has 5+ items, when the human calls for a retro, completion of a design doc, or when the AI Lead suggests one.
-
-**Output:** Update PROCESS.md lessons learned + a `memory/retro-YYYY-MM-DD.md` entry.
+**Output:** Update relevant docs (PROCESS.md lessons, WORKFLOW.md) + `memory/retro-YYYY-MM-DD.md` entry.
 
 ---
 
@@ -324,12 +270,6 @@ The AI Lead should be transparent about what context is loaded and what might be
 - **Session start summary:** Report which files were loaded and approximate token investment
 - **Proactive gap detection:** If something is referenced that isn't in context, say so explicitly
 - **Staleness flags:** If a loaded file seems outdated, flag it
-
-### Context Hygiene
-- Archive historical context that isn't actively relevant
-- Separate universal methodology from project-specific implementation
-- Review and trim regularly — context files grow unless you prune them
-- **Project-specific workflows belong in project repos**, not in the global workspace
 
 ---
 
