@@ -112,39 +112,36 @@ The woodworking CNC software space is remarkably under-patented. Vectric: zero p
 
 ### Architecture Diagram
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        UI Layer (React)                         │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────────────┐  │
-│  │  Board    │ │ Nesting  │ │ Assembly │ │ Simulator / 3D    │  │
-│  │  Setup    │ │ Canvas   │ │ Canvas   │ │ Preview           │  │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────────┬──────────┘  │
-│       │             │            │                 │             │
-│  ┌────┴─────────────┴────────────┴─────────────────┴──────────┐ │
-│  │              Zustand Store (useProjectStore)                │ │
-│  │  project: { boards, links, toolSettings, placements, ... } │ │
-│  └────────────────────────────┬────────────────────────────────┘ │
-└───────────────────────────────┼─────────────────────────────────┘
-                                │
-┌───────────────────────────────┼─────────────────────────────────┐
-│                        Engine Layer                             │
-│  ┌──────────┐ ┌──────────┐ ┌─┴────────┐ ┌───────────────────┐  │
-│  │ Toolpath │ │ G-code   │ │ Assembly │ │ SVG Parser /      │  │
-│  │ Generators│ │ Generator│ │ Solver   │ │ Import            │  │
-│  └──────────┘ └──────────┘ └──────────┘ └───────────────────┘  │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────────────┐  │
-│  │ Nesting  │ │ Tool     │ │ Simulator│ │ Edge Treatments   │  │
-│  │ Engine   │ │ Library  │ │ Heightmap│ │                   │  │
-│  └──────────┘ └──────────┘ └──────────┘ └───────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-┌───────────────────────────────┼─────────────────────────────────┐
-│                     External Services                           │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐                        │
-│  │ Supabase │ │ Stripe   │ │Cloudflare│                        │
-│  │ Auth + DB│ │ Payments │ │ Pages    │                        │
-│  └──────────┘ └──────────┘ └──────────┘                        │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph UI["UI Layer (React)"]
+        BS[Board Setup]
+        NC[Nesting Canvas]
+        AC[Assembly Canvas]
+        SIM[Simulator / 3D Preview]
+        BS & NC & AC & SIM --> ZS
+        ZS["Zustand Store (useProjectStore)<br/>project: boards, links, toolSettings, placements, ..."]
+    end
+
+    subgraph ENGINE["Engine Layer"]
+        TP[Toolpath Generators]
+        GC[G-code Generator]
+        AS[Assembly Solver]
+        SVG[SVG Parser / Import]
+        NE[Nesting Engine]
+        TL[Tool Library]
+        HM[Simulator Heightmap]
+        ET[Edge Treatments]
+    end
+
+    subgraph EXT["External Services"]
+        SB[Supabase Auth + DB]
+        ST[Stripe Payments]
+        CF[Cloudflare Pages]
+    end
+
+    ZS --> ENGINE
+    ENGINE --> EXT
 ```
 
 ### Layer Descriptions
@@ -172,24 +169,16 @@ The woodworking CNC software space is remarkably under-patented. Vectric: zero p
 
 ### Data Flow: Design to G-code
 
-```
-User draws shapes on board
-        ↓
-Shapes stored in Board.shapes[] (Zustand store)
-        ↓
-"Generate Toolpaths" triggers workshopOperations.ts
-        ↓
-Each shape → appropriate toolpath generator (straightCut, pocketCuts, drillCuts, etc.)
-        ↓
-Toolpath generators produce ToolpathOperation[] with coordinates
-        ↓
-Operations ordered: profiles → joints → pockets → drills → edge treatments
-        ↓
-Each operation → G-code generator (generator.ts)
-        ↓
-G-code blocks concatenated with tool change headers between operations
-        ↓
-Final G-code exported as .nc file
+```mermaid
+graph TD
+    A[User draws shapes on board] --> B["Shapes stored in Board.shapes[] (Zustand store)"]
+    B --> C["'Generate Toolpaths' triggers workshopOperations.ts"]
+    C --> D["Each shape → appropriate toolpath generator<br/>(straightCut, pocketCuts, drillCuts, etc.)"]
+    D --> E["Toolpath generators produce<br/>ToolpathOperation[] with coordinates"]
+    E --> F["Operations ordered:<br/>profiles → joints → pockets → drills → edge treatments"]
+    F --> G["Each operation → G-code generator (generator.ts)"]
+    G --> H["G-code blocks concatenated with<br/>tool change headers between operations"]
+    H --> I["Final G-code exported as .nc file"]
 ```
 
 ---
@@ -200,19 +189,20 @@ Final G-code exported as .nc file
 
 The data model is centered on the `Project`, which contains everything needed to fully describe a woodworking project.
 
-```
-Project
-├── boards: Board[]              # The physical boards being designed
-│   ├── dimensions               # Width, height, thickness (all mm internally)
-│   ├── shapes: Shape[]          # Cuts, pockets, holes, paths drawn on this board
-│   ├── joints: Joint[]          # Joint definitions on board edges
-│   └── edgeTreatments: EdgeTreatment[]  # Chamfers, roundovers, rabbets, dados on edges
-├── links: BoardLink[]           # Assembly connections between boards (shared joint params)
-├── toolSettings: ToolSettings   # Global default tool settings
-├── stockSheets: StockSheet[]    # Raw material sheets for nesting
-├── nestingSettings              # Spacing, margins, defaults for stock layout
-├── tabSettings: TabSettings     # Holding tab configuration for profile cuts
-└── placements: BoardPlacement[] # Where each board sits on which stock sheet
+```mermaid
+graph TD
+    P[Project] --> B["boards: Board[]"]
+    P --> L["links: BoardLink[]"]
+    P --> TS["toolSettings: ToolSettings"]
+    P --> SS["stockSheets: StockSheet[]"]
+    P --> NS[nestingSettings]
+    P --> TAB["tabSettings: TabSettings"]
+    P --> PL["placements: BoardPlacement[]"]
+
+    B --> DIM[dimensions]
+    B --> SH["shapes: Shape[]"]
+    B --> J["joints: Joint[]"]
+    B --> ET["edgeTreatments: EdgeTreatment[]"]
 ```
 
 ### Key Design Decisions in the Data Model

@@ -54,18 +54,18 @@ Users generating CNC toolpaths need visual confirmation that cuts will be correc
 
 ### Approach
 
-```
-G-code string (per operation)
-  → parseGcode() → ParsedToolpath { segments[], bounds, stats }
-  → buildTimeline() flattens all enabled operations into TimelineSegment[]
-  → SimulatorTab renders:
-      ├─ StockSheetMesh (transparent box at origin)
-      ├─ NestedBoardMeshes (Assembly Mode only)
-      ├─ ToolpathLines (heat-mapped, progressive or static)
-      ├─ HeightmapSurface (displaced plane with vertex colors)
-      ├─ SimulationController → CuttingHead (animated tool)
-      ├─ PlaybackControls (scrub bar, speed, operation skip)
-      └─ SimulatorHUD (live feed rate, Z-depth, RPM, move type)
+```mermaid
+graph TD
+    A["G-code string (per operation)"] --> B["parseGcode() → ParsedToolpath<br/>{segments[], bounds, stats}"]
+    B --> C["buildTimeline() → TimelineSegment[]"]
+    C --> D[SimulatorTab renders]
+    D --> D1["StockSheetMesh<br/>(transparent box at origin)"]
+    D --> D2["NestedBoardMeshes<br/>(Assembly Mode only)"]
+    D --> D3["ToolpathLines<br/>(heat-mapped, progressive or static)"]
+    D --> D4["HeightmapSurface<br/>(displaced plane with vertex colors)"]
+    D --> D5["SimulationController → CuttingHead<br/>(animated tool)"]
+    D --> D6["PlaybackControls<br/>(scrub bar, speed, operation skip)"]
+    D --> D7["SimulatorHUD<br/>(feed rate, Z-depth, RPM, move type)"]
 ```
 
 The simulation loop is driven by `useFrame()` in `SimulationController`. Each frame:

@@ -105,67 +105,71 @@ A CNC workshop planning app needs to produce valid, safe G-code from a visual de
 The pipeline has two main flows:
 
 #### Workshop Mode Flow
-```
-Shape on Board
-  → generateWorkshopOperations(board, toolSettings)
-    → for each shape:
-        → applyShapeTransforms() (rotation, scale, SVG offset)
-        → flipY() (screen → CNC coords)
-        → generateShapeGcode() dispatches to specialized engine:
-            surfacing → generateSurfacingGcode()
-            line-cut  → generateStraightCutGcode()
-            hole      → generateDrillGcode()
-            rectangle → generatePocketGcode()
-            path      → generateBandSawPathGcode() / generatePocketPathGcode() / generateRouterSlotGcode()
-        → autoAssignTool() picks best tool from library
-        → parseGcode() converts string → ParsedToolpath
-        → Build ToolpathOperation
-    → for each edge treatment:
-        → generateEdgeTreatmentGcode() or generateRoundoverGcode() (roundover disabled)
-    → Filter out empty operations
-  → Return ToolpathOperation[]
+```mermaid
+graph TD
+    A[Shape on Board] --> B["generateWorkshopOperations(board, toolSettings)"]
+    B --> C["For each shape"]
+    C --> D["applyShapeTransforms()<br/>(rotation, scale, SVG offset)"]
+    D --> E["flipY()<br/>(screen → CNC coords)"]
+    E --> F["generateShapeGcode() dispatches to engine"]
+    F --> F1["surfacing → generateSurfacingGcode()"]
+    F --> F2["line-cut → generateStraightCutGcode()"]
+    F --> F3["hole → generateDrillGcode()"]
+    F --> F4["rectangle → generatePocketGcode()"]
+    F --> F5["path → generateBandSawPathGcode()<br/>/ generatePocketPathGcode()<br/>/ generateRouterSlotGcode()"]
+    F1 & F2 & F3 & F4 & F5 --> G["autoAssignTool()"]
+    G --> H["parseGcode() → ParsedToolpath"]
+    H --> I[Build ToolpathOperation]
+    B --> J["For each edge treatment"]
+    J --> K["generateEdgeTreatmentGcode()<br/>(roundover disabled)"]
+    I & K --> L[Filter out empty operations]
+    L --> M["Return ToolpathOperation[]"]
 ```
 
 #### Assembly Mode (Nesting) Flow
-```
-Project (boards + stock sheets + placements)
-  → generateOperations(project)
-    → For each stock sheet with placements:
-        → createProfileCutOperation()
-            → generateProfileCuts() (delegates to nestingGcode or similar)
-            → parseGcode()
-    → createMiterCutOperations() for boards with miter joints
-    → Return ToolpathOperation[]
+```mermaid
+graph TD
+    subgraph GEN["generateOperations(project)"]
+        A["Project<br/>(boards + stock sheets + placements)"] --> B["For each stock sheet with placements"]
+        B --> C[createProfileCutOperation]
+        C --> D["generateProfileCuts()"]
+        D --> E["parseGcode()"]
+        A --> F["createMiterCutOperations()<br/>for boards with miter joints"]
+        E & F --> G["Return ToolpathOperation[]"]
+    end
 
-Export:
-  → exportGcode(operations, projectName)
-    → Sort by order
-    → Insert tool changes (M6 Tn) when toolId/toolType/bitDiameter changes
-    → Strip stray M2/M5/M30 from individual ops
-    → Add unified header/footer (M3, M5, M30)
-    → Return single G-code string
+    subgraph EXP["exportGcode(operations, projectName)"]
+        H[Sort by order] --> I["Insert tool changes (M6 Tn)<br/>when toolId/toolType/bitDiameter changes"]
+        I --> J["Strip stray M2/M5/M30<br/>from individual ops"]
+        J --> K["Add unified header/footer<br/>(M3, M5, M30)"]
+        K --> L[Return single G-code string]
+    end
+
+    G --> EXP
 ```
 
 #### Nesting G-code (nestingGcode.ts) Flow
-```
-generateNestingGcode(options)
-  → Build header (G90, G21, spindle on, dwell)
-  → For each placed board:
-      → Calculate tool-offset outline (rectangle or polygon)
-      → If box joints: buildPolygonToolPath()
-          → generateBoardOutline() → polygon vertices
-          → computeDogBoneReliefs() → inside corner detours
-          → Miter offset at each vertex (outward normal averaging)
-          → boardToStock() transform (rotation 0/90/180/270 + placement offset)
-      → calculateTabs() — evenly distribute along perimeter
-  → optimizeCutOrder() — nearest-neighbor heuristic
-  → Layer-by-layer: all boards at depth N before depth N+1
-      → generateSinglePassForBoard()
-          → Polygon path: tracePolygonPass() with dog-bone detours
-          → Rectangle path: traceRectangleWithTabs()
-              → traceEdgeWithTabs() — raise Z for tabs on last pass only
-  → Spring pass at final depth
-  → Footer (retract, spindle off, return to origin, program end)
+```mermaid
+graph TD
+    A["generateNestingGcode(options)"] --> B["Build header<br/>(G90, G21, spindle on, dwell)"]
+    B --> C[For each placed board]
+    C --> D["Calculate tool-offset outline<br/>(rectangle or polygon)"]
+    D --> BJ{"Box joints?"}
+    BJ -->|Yes| E["buildPolygonToolPath()"]
+    E --> E1["generateBoardOutline() → polygon vertices"]
+    E --> E2["computeDogBoneReliefs() → corner detours"]
+    E --> E3["Miter offset at each vertex"]
+    E --> E4["boardToStock() transform<br/>(rotation 0/90/180/270 + offset)"]
+    BJ -->|No| F["calculateTabs()<br/>(evenly distribute along perimeter)"]
+    E4 --> G["optimizeCutOrder()<br/>(nearest-neighbor heuristic)"]
+    F --> G
+    G --> H["Layer-by-layer:<br/>all boards at depth N before N+1"]
+    H --> I{"Path type?"}
+    I -->|Polygon| J["tracePolygonPass()<br/>with dog-bone detours"]
+    I -->|Rectangle| K["traceRectangleWithTabs()"]
+    K --> K1["traceEdgeWithTabs()<br/>(raise Z for tabs on last pass)"]
+    J & K1 --> L[Spring pass at final depth]
+    L --> M["Footer<br/>(retract, spindle off, return to origin)"]
 ```
 
 ### Data Model

@@ -85,28 +85,34 @@ The axis remapping: CNC is a flat XY plane with Z height. Three.js uses Y-up, so
 
 ### Coordinate System Diagram
 
-```
-SCREEN (Y-down)              CNC MACHINE (Y-up)           THREE.JS SCENE (Y-up)
-                                                          
-  Origin ──► X+               Y+ (back of machine)         Y+ (up/height)
-  │                            ▲                            ▲
-  ▼                            │                            │
-  Y+ (down)                    │                            │
-                               Origin ──► X+                Origin ──► X+
-  ┌─────────────┐              ┌─────────────┐              │
-  │ top (min Y) │              │ top (max Y)  │             Z+ (toward camera
-  │             │   ──flipY──► │              │                = CNC min Y
-  │ bot (max Y) │              │ bot (min Y)  │                = front of machine)
-  └─────────────┘              └─────────────┘
+```mermaid
+graph LR
+    subgraph SCREEN["Screen (Y-down)"]
+        direction TB
+        S1["Origin → X+<br/>↓ Y+ (down)"]
+        S2["top (min Y)<br/>⬇<br/>bot (max Y)"]
+    end
 
-  Screen "top" ═══► CNC "bottom"    (Y inverted)
-  Screen "left" ══► CNC "left"      (X unchanged)
+    subgraph CNC["CNC Machine (Y-up)"]
+        direction TB
+        C1["↑ Y+ (back of machine)<br/>Origin → X+"]
+        C2["top (max Y)<br/>⬇<br/>bot (min Y)"]
+    end
 
-  CNC → Scene:
-    scene.x = cncX * S - halfStockWidth * S     (centered)
-    scene.y = cncZ * S                           (Z→Y, height)
-    scene.z = halfStockHeight * S - cncY * S     (Y→Z, negated, centered)
+    subgraph THREE["Three.js Scene (Y-up)"]
+        direction TB
+        T1["↑ Y+ (up/height)<br/>Origin → X+<br/>Z+ (toward camera)"]
+    end
+
+    SCREEN -- "flipY()<br/>Y inverted<br/>X unchanged" --> CNC
+    CNC -- "cncToScene()<br/>X→X centered<br/>Z→Y height<br/>Y→Z negated" --> THREE
 ```
+
+**Key mappings:**
+
+- Screen "top" (min Y) ═══► CNC "bottom" (min Y) — **Y inverted**
+- Screen "left" ═══► CNC "left" — **X unchanged**
+- CNC → Scene: `scene.x = cncX * S - halfStockWidth * S` (centered), `scene.y = cncZ * S` (Z→Y, height), `scene.z = halfStockHeight * S - cncY * S` (Y→Z, negated, centered)
 
 ## The Transforms
 

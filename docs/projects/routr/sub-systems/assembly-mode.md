@@ -49,30 +49,18 @@ Assembly Mode owns the multi-board workflow: board linking, joint generation, co
 
 ### Architecture Diagram
 
-```
-┌─ Assembly Mode ──────────────────────────────────────────────┐
-│                                                              │
-│  Board Setup ──→ Assembly Canvas ──→ 3D Preview              │
-│  (shared w/      (edge-click         (Three.js               │
-│   Workshop)       linking UI)         assembly view)          │
-│       │                │                                     │
-│       │                ▼                                     │
-│       │         Constraint Solver                            │
-│       │         (BFS, conflict                               │
-│       │          detection)                                  │
-│       │                │                                     │
-│       ▼                ▼                                     │
-│  ┌─────────────────────────────┐                             │
-│  │  Joint System               │                             │
-│  │  (geometry mods, toolpaths) │                             │
-│  └─────────────────────────────┘                             │
-│       │                                                      │
-│       ▼                                                      │
-│  Nesting (stock sheet layout)                                │
-│       │                                                      │
-└───────┼──────────────────────────────────────────────────────┘
-        ▼
-  G-code Pipeline (sub-system)  →  Simulator (sub-system)
+```mermaid
+graph TD
+    subgraph AM["Assembly Mode"]
+        BS["Board Setup<br/>(shared w/ Workshop)"] --> JS["Joint System<br/>(geometry mods, toolpaths)"]
+        AC["Assembly Canvas<br/>(edge-click linking UI)"] --> CS["Constraint Solver<br/>(BFS, conflict detection)"]
+        AC --> P3D["3D Preview<br/>(Three.js assembly view)"]
+        CS --> JS
+        JS --> NEST["Nesting<br/>(stock sheet layout)"]
+    end
+
+    NEST --> GCP["G-code Pipeline (sub-system)"]
+    GCP --> SIM["Simulator (sub-system)"]
 ```
 
 ### Key Interfaces
