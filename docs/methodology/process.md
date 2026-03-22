@@ -1,7 +1,7 @@
 # PROCESS.md — The Claymore Software Development Lifecycle (CSDLC)
 
 *A methodology for human-AI collaborative software development.*
-*Written by Dan Hannah & Clay. Last updated: March 21, 2026.*
+*Written by Dan Hannah & Clay. Last updated: March 22, 2026.*
 
 > "What separates what we're doing from vibe coding is that we're building in these feedback loops." — Dan Hannah
 
@@ -163,11 +163,16 @@ Not everything needs the full pipeline from Step 0:
 
 ### Step 0: Design Doc (Human ↔ AI Lead)
 
-A new project or new epic triggers a design doc. This is where refinement does its heaviest work.
+A new project, sub-system, or epic triggers a design doc. This is where refinement does its heaviest work.
 
-**Two levels:**
-- **Project-level** (heavy) — architecture, tech stack, data model, deployment strategy, security considerations, risks, and cross-cutting concerns
+**Three levels:**
+- **Project-level** (heaviest) — architecture, tech stack, data model, deployment strategy, security, risks, cross-cutting concerns, and product vision
+- **Sub-system-level** (medium) — architectural boundaries, product-level capabilities, strategic narrative, interfaces with other sub-systems, related epics
 - **Epic-level** (lighter) — scope, approach, affected systems, risks, and feature-level acceptance criteria
+
+**The distinction:**
+- **Sub-systems** are architectural boundaries or product-level capabilities. If you removed one, multiple unrelated features would break. They persist — they don't "ship." Examples: a core engine pipeline, a coordinate system, a product mode.
+- **Epics** are deliverable feature work. They ship. They have stories, PRs, acceptance criteria. They're built *on top of* sub-systems. Remove one and a specific capability disappears, but the rest of the system still works.
 
 **How it works:**
 - AI Lead and human go section by section through collaborative refinement
@@ -284,16 +289,33 @@ workspace/
 │       ├── methodology/    # CSDLC process, values, templates
 │       └── projects/
 │           ├── routr/
-│           │   ├── index.md      # Project design doc
-│           │   └── epics/        # Epic design docs
+│           │   ├── design.md       # Project design doc
+│           │   ├── sub-systems/    # Sub-system design docs
+│           │   └── epics/          # Epic design docs
 │           └── quoteai/
-│               ├── index.md
+│               ├── design.md
+│               ├── sub-systems/
 │               └── epics/
 ├── cncmill-app/            # Code repo
 └── other-project/          # Other code repos
 ```
 
 **Code lives in project repos. Design docs and process documentation live in the MkDocs repo. Clean separation.**
+
+### Design Doc Hierarchy
+
+```
+Project Design Doc (design.md)
+  └── System-wide: tech stack, data model, deployment, security, product vision
+
+Sub-system Design Docs (sub-systems/)
+  └── Architectural boundaries & product capabilities: modes, pipelines, engines
+
+Epic Design Docs (epics/)
+  └── Deliverable features: scoped work with stories, PRs, acceptance criteria
+```
+
+**The test:** If you removed it, would multiple unrelated features break? → Sub-system. If you removed it, would one specific capability disappear? → Epic.
 
 Each project's code repo should have a `WORKFLOW.md` that implements PROCESS.md for that specific context — tech stack, repo conventions, QA procedures, gotchas.
 
