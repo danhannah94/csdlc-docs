@@ -42,7 +42,7 @@ nav:
     - Epic Design Doc Template: methodology/epic-design-template.md
   - Projects:
     - Routr:
-      - Overview: projects/routr/index.md
+      - Design: projects/routr/design.md
 
 markdown_extensions:
   - admonition
