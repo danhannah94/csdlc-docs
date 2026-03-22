@@ -43,6 +43,15 @@ nav:
   - Projects:
     - Routr:
       - Design: projects/routr/design.md
+      - Epics:
+        - Workshop Mode: projects/routr/epics/workshop-mode.md
+        - G-code Pipeline: projects/routr/epics/gcode-pipeline.md
+        - Coordinate Systems: projects/routr/epics/coordinate-systems.md
+        - Edge Treatments: projects/routr/epics/edge-treatments.md
+        - SVG Import & Engrave: projects/routr/epics/svg-import.md
+        - Nesting: projects/routr/epics/nesting.md
+        - Assembly & Joints: projects/routr/epics/assembly.md
+        - Simulator: projects/routr/epics/simulator.md
 
 markdown_extensions:
   - admonition
