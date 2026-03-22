@@ -61,10 +61,11 @@ The docs you're reading now are the result. They serve as proof that design docs
 
 ### Future Pipelines
 
-Beyond the two existing modes, Routr's vision includes additional input pipelines:
+Beyond the two existing modes, Routr's vision includes additional input pipelines and platform plays:
 
 - **PDF-to-Gcode** — AI-powered pipeline that reads woodworking plan PDFs, extracts dimensions and cut lists, and generates G-code. The "moonshot" feature.
 - **CAD-to-Gcode** — Import CAD models and translate them into CNC operations.
+- **Plan Marketplace** — A platform for users to share and sell CNC-ready plans. The business model evolution: Workshop Mode gets users making things → PDF/CAD-to-Gcode expands what they can make → Marketplace lets them monetize and share. Think Etsy for CNC plans.
 
 ### Patent Strategy
 
@@ -289,6 +290,8 @@ Cloudflare Pages auto-builds and deploys on every push to `main`. No separate CI
 | Internal Units (mm) | All dimensions stored in mm. Display conversion at UI layer. `MM_PER_INCH = 25.4`. | All epics | N/A — simple convention |
 | Tool Settings Resolution | Operations can use a tool from the library (`toolId`) or manual settings. Resolved at generation time. V-bit geometry has its own math (`vBitGeometry.ts`). | Workshop tools, Edge treatments, SVG engrave | N/A |
 | Feature Flags | `ASSEMBLY_MODE_ENABLED`, roundover disabled via feature flag. Controls what users see in production. | Assembly, Edge treatments | N/A |
+| Release Flags (Staging vs Prod) | **Not yet implemented.** Need environment-aware flags so features can be visible on staging but hidden in production. Currently feature flags are global — same behavior on staging and prod. | All new features | Needed before post-launch feature development |
+| Real-World Validation | G-code can only be fully validated by cutting on a physical CNC machine. Digital testing covers math and format but not real-world behavior (tool deflection, material variance, machine-specific quirks). | G-code Pipeline, Workshop Mode, Edge Treatments | Yes — see Validation Strategy below |
 
 ---
 
@@ -299,6 +302,8 @@ Cloudflare Pages auto-builds and deploys on every push to `main`. No separate CI
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
 | Coordinate bugs in new features | High | High — produces wrong G-code, damages material or machine | Dedicated coordinate systems doc, integration tests for all edges |
+| Real-world validation bottleneck | High | High — digital tests pass but G-code fails on machine | Layered validation strategy (see below), G-code snapshot tests, simulator calibration |
+| No staging release flags | Medium | Medium — can't safely test new features in staging without exposing to prod | Implement environment-aware feature flags before post-launch feature work |
 | No project persistence | Certain | Medium — users lose work on browser close | Planned epic for save/load |
 | Client-side G-code generation | Certain | Low — users could craft bad G-code | Export disclaimer, terms of use, user assumes responsibility |
 | Supabase free tier limits | Low | Medium — 50K MAU, 500MB DB | Unlikely to hit soon; upgrade path available |
@@ -312,12 +317,33 @@ Cloudflare Pages auto-builds and deploys on every push to `main`. No separate CI
 - **Assembly mode is feature-flagged off.** Works but not polished enough for launch.
 - **No curved pocket toolpaths.** Router pocket for freeform (path) shapes doesn't follow curves correctly.
 
+### Validation Strategy
+
+Routr has a unique challenge: G-code changes can only be fully validated by cutting physical material on a CNC machine. Digital testing catches math and format errors, but real-world factors (tool deflection, material variance, machine quirks) can only be verified with actual cuts.
+
+**Layered validation approach (least → most expensive):**
+
+1. **Unit tests (automated)** — Test the math. Toolpath coordinates, flipY transforms, V-bit depth calculations, bit offset logic. 634+ tests cover this layer. Catches most regressions.
+
+2. **G-code snapshot tests (automated, TODO)** — Generate G-code for a set of reference designs and compare against known-good snapshots. If output changes, test fails. Catches G-code pipeline regressions without cutting anything. This is the highest-ROI addition to the test suite.
+
+3. **Simulator validation (visual)** — The simulator is a virtual test cut. Once calibrated against real cuts, it becomes the regression test harness. Changes that look wrong in the simulator get caught before reaching the machine.
+
+4. **Real-world validation cuts (physical, rare)** — Required for: new operation types (first-ever cut of that kind), coordinate system changes, initial simulator calibration, and pre-launch sign-off. NOT required for every feature — snapshot tests and simulator handle regressions.
+
+**Reference project suite (TODO):** A set of Routr projects that exercise every feature — one with edge treatments, one with SVG engrave, one with nesting, etc. Automated tests generate G-code for each, compare against snapshots, and flag drift.
+
+**Pre-launch minimum:** One real validation cut per operation type (straight cut, pocket, drill, profile, edge treatment, SVG engrave). ~6-8 cuts total. This validates the toolpath generators and calibrates the simulator.
+
 ### Tech Debt
 
 - **Dead components:** `AssemblyPanel.tsx` (old dropdown UI, replaced by `AssemblyCanvas.tsx`) still exists in code.
 - **Operation reorder doesn't persist.** Dragging operations in the simulator panel resets on "Generate Toolpaths."
 - **Edge treatment depth calculations** were patched multiple times. The current implementation works but the code path is convoluted (3-layer patch cycle during March 5-6 sprint).
 - **No CI/CD tests.** Tests run locally only. Build failures are the only automated gate.
+- **Dead GitHub Pages deployment.** PR preview deployments via GitHub Pages still exist from before the Cloudflare migration. Should be stripped out.
+- **No staging release flags.** Feature flags are global — no mechanism to show features on staging while hiding from prod. Needed before post-launch feature development.
+- **No G-code snapshot tests.** Highest-ROI missing test type. Would catch pipeline regressions without physical cuts.
 
 ---
 

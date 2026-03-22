@@ -211,6 +211,10 @@ The critical translation layer — where methodology becomes execution. The AI L
 
 **Why this matters to the human:** This is where the AI Lead's understanding of the codebase meets the human's intent. A well-crafted prompt produces a clean first-pass. A sloppy prompt produces rework.
 
+**Reusable prompt templates:**
+- **Implementation agents** — use the project's WORKFLOW.md QA Agent Template for structure
+- **Doc-writing agents** — use the [Doc-Writing Agent Template](csdlc-docs/docs/methodology/doc-agent-template.md) for retroactive documentation, doc updates, and code-to-doc audits
+
 ### Step 3: Sub-agent Execution
 
 - One ticket per agent — no multi-concern deliverables
