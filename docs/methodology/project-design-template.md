@@ -117,6 +117,18 @@ Be honest about where the system is vulnerable. What's mitigated, what's accepte
 
 ---
 
+## Cross-Cutting Concerns
+
+Architectural concerns that span multiple epics. These aren't features — they're constraints, conventions, or systems that every epic needs to be aware of.
+
+| Concern | Summary | Affected Epics | Dedicated Doc? |
+|---------|---------|---------------|----------------|
+| | | | [link](epics/concern-name.md) or N/A |
+
+*If a concern is deep enough to warrant its own document (e.g., a coordinate system that's caused repeated bugs), give it a dedicated doc in `epics/`. If it's simple (e.g., "all internal units are mm"), a row in this table is sufficient.*
+
+---
+
 ## Risks & Constraints
 
 ### Technical Risks

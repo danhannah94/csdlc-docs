@@ -125,11 +125,5 @@ Issues discovered during or after implementation. Feeds back into the project-le
 
 ---
 
-## Retrospective Notes
-
-What went well, what didn't, what we'd do differently. Filled in after the epic ships.
-
----
-
 *This epic doc is refined collaboratively (Step 0) before stories are broken down (Step 1). Once refined, the AI Lead extracts context from this doc to craft sub-agent prompts (Step 2).*
 *Update this doc as implementation reveals new information — design docs are living documents.*
