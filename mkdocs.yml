@@ -38,6 +38,8 @@ nav:
     - Open Questions: methodology/open-questions.md
     - Workflow Template: methodology/workflow-template.md
     - Agent Base Template: methodology/agent-base-template.md
+    - Project Design Doc Template: methodology/project-design-template.md
+    - Epic Design Doc Template: methodology/epic-design-template.md
   - Projects:
     - Routr:
       - Overview: projects/routr/index.md
