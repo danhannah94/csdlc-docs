@@ -39,6 +39,48 @@ Product-led growth — the app is the sales pitch. No marketing site needed beyo
 
 ---
 
+## Product Vision
+
+### The Two Modes
+
+Routr has two product modes that represent different approaches to CNC woodworking:
+
+**Assembly Mode** was the original vision — a full furniture design-to-manufacture pipeline. Design individual boards, connect them with joints (box, dovetail, dado, rabbet, miter), preview the assembled result in 3D, nest boards onto stock sheets, and simulate the CNC toolpaths. Five steps: Design → Assembly → 3D Preview → Nesting → Simulation.
+
+The problem was combinatorial complexity. Every combination of board shapes × joint types × edge connections created an enormous surface area. After months of development, Assembly Mode could essentially make boxes. Useful, but far from the vision.
+
+**Workshop Mode** was the strategic pivot for launch. Instead of modeling entire assemblies, focus on single boards and think in terms of woodworking tools — table saw, router, drill press, planer, band saw. This dramatically reduced complexity while delivering immediate value. Workshop Mode is the launch product; Assembly Mode is the long-term growth path.
+
+This pivot is one of the most important decisions in the project's history. It traded ambition for shippability — and it worked.
+
+### The Documentation Story
+
+This project was built without design docs for the first several months. Code was the only source of truth. When CSDLC (Claymore Software Development Lifecycle) was formalized as a methodology, the first major application was creating retroactive design docs for Routr — reading the actual source code, documenting what exists, and surfacing inconsistencies that had accumulated without architectural documentation.
+
+The docs you're reading now are the result. They serve as proof that design docs don't have to come first to be valuable — but they're dramatically more valuable when they do.
+
+### Future Pipelines
+
+Beyond the two existing modes, Routr's vision includes additional input pipelines:
+
+- **PDF-to-Gcode** — AI-powered pipeline that reads woodworking plan PDFs, extracts dimensions and cut lists, and generates G-code. The "moonshot" feature.
+- **CAD-to-Gcode** — Import CAD models and translate them into CNC operations.
+
+### Patent Strategy
+
+The woodworking CNC software space is remarkably under-patented. Vectric: zero patents. Carbide 3D: zero. Inventables: one (hardware only). This creates a significant first-mover advantage.
+
+| Patent | Status | Application # | Summary |
+|--------|--------|---------------|---------|
+| Workshop Mode | **Filed** ✅ | #63/998,973 (March 6, 2026) | Operation-first paradigm — users think in woodworking tools, not CAM operations. 23 claims. Micro entity ($65). |
+| PDF-to-Gcode Pipeline | Drafted | — | AI document understanding → cut list extraction → G-code generation. 30 claims drafted. |
+| Integrated Browser Pipeline | Identified | — | End-to-end reactive propagation in browser. Rated ⭐⭐⭐⭐⭐ novelty. |
+| Assembly Constraint Solver + Joint Geometry | Identified | — | Automated joint generation from edge connections with constraint solving. Rated ⭐⭐⭐⭐ novelty. |
+
+**Not patentable:** Nesting (prior art since 1960s), heightmap simulation (expired 1990s patents).
+
+---
+
 ## Tech Stack
 
 | Layer | Technology | Rationale |
@@ -289,20 +331,30 @@ Cloudflare Pages auto-builds and deploys on every push to `main`. No separate CI
 
 ---
 
+## Sub-system Index
+
+Sub-systems are architectural boundaries or product-level capabilities. If you removed one, multiple unrelated features would break.
+
+| Sub-system | Doc | Status | Summary |
+|------------|-----|--------|---------|
+| Workshop Mode | [workshop-mode.md](sub-systems/workshop-mode.md) | Shipped (launch product) | Operation-first paradigm — users think in woodworking tools |
+| Assembly Mode | [assembly-mode.md](sub-systems/assembly-mode.md) | Shipped (feature-flagged off) | Multi-board furniture pipeline: Design → Assembly → 3D → Nesting → Sim |
+| G-code Pipeline | [gcode-pipeline.md](sub-systems/gcode-pipeline.md) | Shipped | Shape → toolpath → operation ordering → G-code export |
+| Coordinate Systems | [coordinate-systems.md](sub-systems/coordinate-systems.md) | Documented | Screen (Y-down), CNC (Y-up), Three.js — transforms and mapping |
+| Simulator | [simulator.md](sub-systems/simulator.md) | Shipped | Toolpath visualization, heightmap material removal, playback |
+
 ## Epic Index
 
-| Epic | Doc | Status | Summary |
-|------|-----|--------|---------|
-| Workshop Mode | [TBD](epics/workshop-mode.md) | Shipped | Core shape tools: table saw, router, drill press, planer, band saw |
-| G-code Pipeline | [TBD](epics/gcode-pipeline.md) | Shipped | Toolpath generation → operation ordering → G-code export |
-| Coordinate Systems | [TBD](epics/coordinate-systems.md) | To Document | Screen, CNC, and Three.js coordinate spaces + transforms |
-| Edge Treatments | [TBD](epics/edge-treatments.md) | Shipped (roundover disabled) | Chamfer, roundover, rabbet, dado on board edges |
-| SVG Import & Engrave | [TBD](epics/svg-import.md) | Shipped | SVG parsing, pocket detection, island subtraction, engrave operations |
-| Nesting | [TBD](epics/nesting.md) | Shipped | Multi-sheet stock layout, auto-nest algorithm |
-| Assembly & Joints | [TBD](epics/assembly.md) | Shipped (feature-flagged) | Board linking, constraint solver, 3D preview |
-| Simulator | [TBD](epics/simulator.md) | Shipped | Toolpath visualization, heightmap material removal, playback |
-| Auth & Payments | [TBD](epics/auth-payments.md) | Shipped | Supabase auth, Stripe checkout, export gating |
-| Theming | [TBD](epics/theming.md) | Shipped | Dark/light theme system |
+Epics are deliverable feature work built on top of sub-systems. Remove one and a specific capability disappears.
+
+| Epic | Doc | Status | Parent Sub-system | Summary |
+|------|-----|--------|-------------------|---------|
+| Edge Treatments | [edge-treatments.md](epics/edge-treatments.md) | Shipped (roundover disabled) | G-code Pipeline, Coordinate Systems | Chamfer, roundover, rabbet, dado on board edges |
+| SVG Import & Engrave | [svg-import.md](epics/svg-import.md) | Shipped | G-code Pipeline | SVG parsing, pocket detection, island subtraction, engrave |
+| Nesting | [nesting.md](epics/nesting.md) | Shipped | Assembly Mode | Multi-sheet stock layout, auto-nest algorithm |
+| Assembly & Joints | [assembly-joints.md](epics/assembly-joints.md) | Shipped (flagged off) | Assembly Mode | Board linking, constraint solver, joint geometry |
+| Auth & Payments | — | Shipped | — | Supabase auth, Stripe checkout, export gating |
+| Theming | — | Shipped | — | Dark/light theme system |
 
 ---
 

@@ -147,13 +147,21 @@ Known shortcuts, deferred decisions, things that work but shouldn't stay this wa
 
 ---
 
+## Sub-system Index
+
+Sub-systems are architectural boundaries or product-level capabilities. If you removed one, multiple unrelated features would break.
+
+| Sub-system | Doc | Status | Summary |
+|------------|-----|--------|---------|
+| | [link](sub-systems/subsystem-name.md) | Draft / Refined / Complete | One-line summary |
+
 ## Epic Index
 
-Links to epic-level design docs. Each epic covers a major subsystem or capability.
+Epics are deliverable feature work built on top of sub-systems. Remove one and a specific capability disappears.
 
-| Epic | Doc | Status | Summary |
-|------|-----|--------|---------|
-| | [link](epics/epic-name.md) | Draft / Refined / Complete | One-line summary |
+| Epic | Doc | Status | Parent Sub-system | Summary |
+|------|-----|--------|-------------------|---------|
+| | [link](epics/epic-name.md) | Draft / Refined / Complete | | One-line summary |
 
 ---
 
