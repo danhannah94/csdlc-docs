@@ -199,6 +199,90 @@ window.__routr = {
 
 > 🟡 **OPEN QUESTION:** Should this API be available in production behind a feature flag (for future AI features)? Or strictly dev/test only for now?
 
+#### MCP Server: AI-Native Tool Interface
+
+The `window.__routr` API gives programmatic access from within the browser. But to let AI agents **reason about and drive the app from outside** — connecting from Claude, OpenClaw sub-agents, or any MCP-compatible client — we wrap the same capabilities in an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server.
+
+**What MCP adds over a raw API:**
+
+MCP doesn't just expose endpoints — it gives each tool rich descriptions, parameter schemas, and contextual guidance so the LLM knows *when, why, and how* to use each tool. The AI doesn't just know "there's a `loadFixture` function." It knows "use `loadFixture` when you want to set up a test scenario — it takes a fixture JSON describing a board with shapes and tool settings, and after loading you can generate G-code or capture screenshots to verify the result."
+
+**Proposed MCP tool surface:**
+
+```
+MCP Server: routr-tools
+├── create_board          — Create a board with dimensions and material
+├── add_shape             — Add a cut, pocket, hole, path, or slot to a board
+├── add_edge_treatment    — Apply chamfer, dado, or rabbet to a board edge
+├── set_tool_settings     — Configure bit, feeds, speeds
+├── import_svg            — Import an SVG file for engrave/pocket
+├── generate_toolpaths    — Generate toolpath operations from current state
+├── generate_gcode        — Generate G-code and return as string
+├── capture_design_view   — Screenshot the 2D design canvas
+├── capture_sim_view      — Screenshot the 3D simulator at a standard angle
+├── measure_distance      — Measure between two points or shape-to-edge
+├── load_fixture          — Load a test fixture JSON into the app
+├── get_project_state     — Read the current Zustand store state
+└── validate_gcode        — Compare generated G-code against an expected file
+```
+
+**This unlocks AI-driven exploratory testing:**
+
+Scripted integration tests (fixtures + assertions) catch regressions. But an AI agent connected via MCP can do something far more powerful — **creative, exploratory testing:**
+
+- *"Design a board with a 2-inch pocket centered on a 6×12 board, generate the G-code, and verify the pocket coordinates are correct"*
+- *"Try every edge treatment on every edge and check for visual inconsistencies between the design and sim tabs"*
+- *"Create a stress test — maximum shapes, weird dimensions, overlapping cuts — and report what breaks"*
+- *"Verify that changing the bit diameter correctly adjusts all toolpath offsets"*
+
+The AI understands woodworking concepts, understands the app's capabilities, and can creatively find edge cases that no human would think to write a fixture for. This is a fundamentally different testing paradigm — not "did it change?" (regression) but "is it correct?" (verification).
+
+**The product vision connection:**
+
+The MCP server built for testing IS the integration layer for Routr's AI product features:
+
+| Use Case | How MCP Enables It |
+|----------|-------------------|
+| **AI-driven testing** | Sub-agents connect via MCP, design test scenarios, execute, report findings |
+| **PDF-to-G-code** | AI reads a woodworking plan PDF, connects to Routr via MCP, calls `create_board` + `add_shape` to build the design, exports G-code |
+| **AI Design Assistant** | "I want a cutting board with a juice groove" → AI agent uses MCP tools to design it in Routr |
+| **Plan Marketplace ingestion** | Automated pipeline that takes uploaded plans and converts them to Routr projects |
+
+**Architecture:**
+
+```mermaid
+graph TD
+    subgraph CLIENTS["MCP Clients"]
+        CLAUDE["Claude / AI Agents"]
+        OPENCLAW["OpenClaw Sub-agents"]
+        TESTING["Test Automation"]
+    end
+
+    subgraph MCP["MCP Server (routr-tools)"]
+        TOOLS["Tool definitions<br/>+ descriptions + schemas"]
+    end
+
+    subgraph APP["Routr App (Browser)"]
+        API["window.__routr API"]
+        STORE["Zustand Store"]
+        ENGINE["Engine Pipeline"]
+        CANVAS["Canvas Renderers"]
+    end
+
+    CLIENTS --> |"MCP protocol"| MCP
+    MCP --> |"Playwright bridge<br/>or direct API"| APP
+    API --> STORE
+    API --> ENGINE
+    API --> CANVAS
+```
+
+The MCP server connects to the running Routr app (via Playwright for browser-based interaction, or directly to the engine for headless G-code generation). This means we can run both:
+
+- **Headed mode**: MCP drives the actual app UI (for visual testing)
+- **Headless mode**: MCP calls engine functions directly (for fast G-code testing)
+
+> 🟡 **OPEN QUESTION:** Should the MCP server be a separate package in the repo, or part of the app's dev tooling? Separate package is cleaner for distribution but adds maintenance overhead.
+
 ---
 
 ### Layer 2: Functional / Integration Tests (Detail)
@@ -510,11 +594,13 @@ Features extracted from this epic. Each becomes a set of implementable stories d
 | F5 | **In-App Measurement Tool** — Point-to-point and shape-to-edge distance display, both UI and API | F1 | |
 | F6 | **Physical Validation Protocol** — Measurement recording template, validation matrix tracker, photo archive | F2, F5 | |
 | F7 | **Comprehensive Fixture** — Multi-operation board exercising full pipeline | F2, F3, F4 | |
+| F8 | **MCP Server (routr-tools)** — Model Context Protocol wrapper for AI-driven exploratory testing and future product features | F1 | |
 
 ```mermaid
 graph TD
     F1["F1: AI-Accessible Interface<br/>(window.__routr)"] --> F2["F2: Test Fixture Library"]
     F1 --> F5["F5: In-App Measurement Tool"]
+    F1 --> F8["F8: MCP Server<br/>(routr-tools)"]
     F2 --> F3["F3: G-code Integration Tests"]
     F2 --> F4["F4: Visual Regression Tests"]
     F2 --> F6["F6: Physical Validation Protocol"]
@@ -522,6 +608,7 @@ graph TD
     F2 --> F7["F7: Comprehensive Fixture"]
     F3 --> F7
     F4 --> F7
+    F8 --> |"Enables AI-driven<br/>exploratory testing"| F7
 ```
 
 *Features are broken down into implementable stories during Step 1 (Story Breakdown). This table is the feature index.*
@@ -543,6 +630,7 @@ graph TD
 | 2026-03-23 | Three-layer testing model (unit → integration → E2E) | Cleaner than four layers; sim eyeball is part of E2E, not its own layer | Four layers (rejected — over-granular) |
 | 2026-03-23 | Build AI-accessible interface (window.__routr) | App is built by AI — should be testable by AI. Hooks enable testing AND future AI features (PDF-to-G-code). | Playwright-only UI automation (rejected — fragile, slow, fights against the grain) |
 | 2026-03-23 | Hybrid CI/CD: GitHub Actions for deterministic tests, local for visual/AI-driven | CI catches regressions between sessions without token cost; sub-agents handle dev-loop testing | All-CI (rejected — visual tests too flaky initially) or all-local (rejected — misses between-session regressions) |
+| 2026-03-23 | MCP server wrapping `window.__routr` for AI-driven testing | MCP gives LLMs structured tool access with context — enables exploratory testing AND future product features (PDF-to-G-code, AI Design Assistant). The testing infrastructure IS the product integration layer. | Raw API only (rejected — misses the LLM context layer), no MCP (rejected — leaves AI testing as brittle Playwright scripting) |
 
 ---
 
