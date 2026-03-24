@@ -877,6 +877,75 @@ graph TD
 
 ---
 
+## Story Breakdown
+
+### Implementation Batches
+
+Stories are organized into dependency-ordered batches:
+
+```
+Batch 1: F1 (AI Interface) → F3 (Fixtures) → F4 (G-code Integration Tests)
+  → First real regression protection, fast feedback loop
+
+Batch 2: F2 (MCP Server) → F5 (Visual Regression + Cross-Layer)
+  → External AI access, screenshot baselines, measurement assertions
+
+Batch 3: F7 (Physical Validation Protocol)
+  → Human on the CNC, protocol + recording templates
+```
+
+### F1: AI-Accessible Interface — Stories
+
+**Dependency graph:**
+
+```mermaid
+graph TD
+    S1["F1-S1: Foundation & Types"] --> S2["F1-S2: Fixture Loading<br/>& State Access"]
+    S1 --> S4["F1-S4: Programmatic<br/>Store Actions"]
+    S1 --> S5["F1-S5: Canvas Capture"]
+    S1 --> S6["F1-S6: Measurement Engine"]
+    S2 --> S3["F1-S3: G-code<br/>Generation Hooks"]
+
+    S3 -.-> F3["F3: Test Fixture Library"]
+    S3 -.-> F4["F4: G-code Integration Tests"]
+    S4 -.-> F2["F2: MCP Server"]
+    S5 -.-> F5["F5: Visual Regression"]
+    S6 -.-> F5
+
+    style S1 fill:#e67e22,color:#fff
+    style S2 fill:#e67e22,color:#fff
+    style S3 fill:#e67e22,color:#fff
+    style S4 fill:#3498db,color:#fff
+    style S5 fill:#3498db,color:#fff
+    style S6 fill:#3498db,color:#fff
+    style F3 fill:#555,color:#fff
+    style F4 fill:#555,color:#fff
+    style F2 fill:#555,color:#fff
+    style F5 fill:#555,color:#fff
+```
+
+*🟠 Orange = critical path (serial). 🔵 Blue = parallelizable after S1.*
+
+#### Code Investigation Notes
+
+These findings informed story scoping:
+
+- **Feature flags**: Two patterns in use — `featureFlags.ts` (compile-time booleans) and hostname checks (runtime). Neither is a proper env-driven system. For `window.__routr`, we'll use `import.meta.env.VITE_EXPOSE_DEV_API` so Vite tree-shakes the entire module out of production builds. This is scoped to S1 — we're not overhauling the existing feature flag patterns.
+- **2D canvas (BoardCanvas)**: Raw HTML `<canvas>` via `useRef<HTMLCanvasElement>`. Capture is trivial — `canvasRef.current.toDataURL()` gives a PNG directly.
+- **3D canvas (Preview3D/Scene3D)**: `@react-three/fiber` wrapping Three.js. WebGL renderer (`gl`) is accessible inside the R3F `<Canvas>` context via `useThree()`. Capture via `gl.domElement.toDataURL()`, but requires calling from inside R3F context. Needs camera positioning to standard orthographic angles before capture, then restore.
+- **Measurement engine (F1-S6)**: Scope is the programmatic API only (`measureDistance`, `measureFromEdge`). The in-app measurement tool UI (toolbar mode, click-to-measure, visual overlays) is deferred to a separate epic.
+
+| Story | Name | Size | Description | Acceptance Criteria |
+|-------|------|------|-------------|-------------------|
+| **F1-S1** | Foundation & Types | Small | Create the `window.__routr` namespace, TypeScript types for the full API surface, and env-based conditional exposure. The scaffold everything else hangs on. | ① `window.__routr` object exists in dev/test builds. ② Not present in production builds (tree-shaken via `VITE_EXPOSE_DEV_API`). ③ TypeScript types exported: `TestFixture`, `BoardConfig`, `ShapeConfig`, `ToolSettings`, `EdgeTreatmentConfig`, `Point`, `ProjectState`. ④ Types match the fixture JSON schema defined in the epic design doc. ⑤ `window.__routr` is an empty shell — methods are stubs that throw "not implemented" until subsequent stories wire them. ⑥ Unit test confirms the namespace exists in dev mode and is absent when env flag is unset. |
+| **F1-S2** | Fixture Loading & State Access | Medium | Implement `loadFixture()` to hydrate the Zustand store from a JSON fixture, and `getState()` to read current store state. This is the core input mechanism for all testing. | ① `loadFixture(fixture: TestFixture)` clears existing project state and hydrates the store with the fixture's board, shapes, tool settings, and edge treatments. ② `getState()` returns the current `ProjectState` matching the Zustand store shape. ③ Loading a fixture then calling `getState()` returns state consistent with the fixture input. ④ Invalid fixtures throw descriptive errors (missing required fields, invalid shape types). ⑤ Optional fixture fields (e.g., `edgeTreatments`) default gracefully when omitted. ⑥ Unit tests cover: valid fixture load, state round-trip, missing fields, invalid types, empty shapes array, and state clearing (loading a second fixture fully replaces the first). |
+| **F1-S3** | G-code Generation Hooks | Small | Expose `generateGcode()` and `generateToolpaths()` on the API surface. These wrap existing engine pipeline functions for programmatic access. | ① `generateGcode()` returns a G-code string identical to what the Export button produces. ② `generateToolpaths()` returns the intermediate `ToolpathOperation[]` array. ③ After `loadFixture()` → `generateGcode()`, the output is deterministic (same fixture = same G-code, every time). ④ Calling `generateGcode()` with no project loaded returns an empty string or throws a descriptive error. ⑤ Unit test: load a simple fixture (one board, one shape), generate G-code, assert output is non-empty and contains expected G-code structure (`G21`, `G90`, `M3`, etc.). |
+| **F1-S4** | Programmatic Store Actions | Small–Med | Expose `addBoard()`, `addShape()`, `setToolSettings()`, `addEdgeTreatment()` for building projects programmatically (individual mutations vs. fixture bulk-load). These become the foundation for MCP tool surface. | ① `addBoard(config: BoardConfig)` creates a board and returns its ID. ② `addShape(boardId, shape: ShapeConfig)` adds a shape to the specified board and returns its ID. ③ `setToolSettings(settings: ToolSettings)` updates global tool settings. ④ `addEdgeTreatment(boardId, treatment: EdgeTreatmentConfig)` adds an edge treatment to the specified board. ⑤ Invalid `boardId` references throw descriptive errors. ⑥ State after programmatic actions matches state after loading an equivalent fixture. ⑦ Unit tests cover: add board → add shape → generate G-code round-trip; invalid board ID; all shape types (`rectangle`, `circle`, `line`, `path`, `slot`, `surfacing`). |
+| **F1-S5** | Canvas Capture | Small–Med | Implement `captureDesignCanvas()` and `captureSimCanvas()` for programmatic screenshot capture from both the 2D design tab and 3D simulator. | ① `captureDesignCanvas()` returns a base64 PNG data URL of the current 2D design canvas. ② `captureSimCanvas()` returns a base64 PNG data URL of the current 3D sim canvas. ③ `captureSimCanvas()` accepts an optional `angle` parameter: `'top-down'` (default) or `'front'` — camera is positioned to the standard orthographic angle before capture. ④ Camera state is restored after capture (user's view isn't disrupted). ⑤ Output dimensions are consistent regardless of window size (locked to a standard capture resolution). ⑥ Returns a descriptive error if the target canvas is not mounted/visible. ⑦ Integration test via Playwright: load fixture → capture both canvases → assert output is valid PNG data URL with non-zero dimensions. |
+| **F1-S6** | Measurement Engine | Medium | Implement `measureDistance()` and `measureFromEdge()` — pure geometry math against store state. No UI, no overlays. This is the programmatic measurement API that the future in-app measurement tool UI will consume. | ① `measureDistance(pointA: Point, pointB: Point)` returns the Euclidean distance in project units (mm). ② `measureFromEdge(shapeId, edge: 'top' \| 'bottom' \| 'left' \| 'right')` returns the distance from the shape's nearest boundary to the specified board edge. ③ Measurements use the shape's actual geometry (not bounding box) — a circle's distance to an edge is measured from its circumference, not its center. ④ Invalid `shapeId` throws a descriptive error. ⑤ Results are consistent with the coordinate system used by the G-code pipeline (no coordinate flip discrepancies). ⑥ Unit tests cover: point-to-point distance, rectangle-to-edge for all 4 edges, circle-to-edge, shape at board boundary (distance = 0), shape centered on board. |
+
+---
+
 ## Decisions Log
 
 | Date | Decision | Rationale | Alternatives Considered |
@@ -901,6 +970,11 @@ graph TD
 | 2026-03-24 | `window.__routr` on staging behind feature flag, not in production yet | Staging enables AI feature experimentation without production risk | Dev only (rejected — limits experimentation), Prod (rejected — premature) |
 | 2026-03-24 | E2E validation records are pass/fail with comments; photos optional | Photos are documentation, not test mechanisms. Consistent physical photos are impractical. | Mandatory photos (rejected — too rigid, inconsistent results) |
 | 2026-03-24 | AI interface as core architectural pattern for AI-designed apps | If AI designs, writes, tests, and will power features of the app — a first-class AI interaction layer is as fundamental as choosing state management. Should be considered for all CSDLC projects. | Treat as optional tooling (rejected — misses the architectural significance) |
+| 2026-03-25 | Defer protagonist/antagonist codification in PROCESS.md until pattern is tested | Don't commit untested patterns to the methodology. Design it in the epic, validate during implementation, then codify. | Codify immediately (rejected — premature standardization) |
+| 2026-03-25 | Measurement tool: engine in this epic, UI in separate epic | Validation needs programmatic `measureDistance`/`measureFromEdge`. The toolbar mode, click-to-measure UX, and visual overlays are a user-facing feature with its own design concerns. | All in one epic (rejected — couples validation timeline to UI design) |
+| 2026-03-25 | `VITE_EXPOSE_DEV_API` env flag for `window.__routr` | Vite tree-shakes the entire module out of prod builds. Dev/test always-on, staging via env var. Scoped to this API — not overhauling existing feature flag patterns. | Compile-time boolean like `featureFlags.ts` (rejected — can't toggle on staging without rebuild). Hostname check (rejected — fragile, not tree-shakeable). |
+| 2026-03-25 | Keep F1-S2 and F1-S3 as separate stories | S2 (fixture loading) is the most complex F1 story — JSON→Zustand mapping, state clearing, validation. S3 (G-code hooks) is thin wrappers. Separating them keeps S2 focused and prevents delays if fixture loading hits complications. | Combine S2+S3 (rejected — reliability over speed) |
+| 2026-03-25 | Implementation batches: F1→F3→F4, then F2→F5, then F7 | Fastest path to regression protection (Batch 1). MCP layer comes online when there's something to wrap (Batch 2). Physical validation last since it depends on everything + machine time (Batch 3). | Build MCP first (rejected — nothing to wrap yet) |
 | 2026-03-24 | Consolidated features: 7 instead of 9 | Comprehensive fixture absorbed into F3 (it's just another fixture). Cross-layer measurement tests absorbed into F5 (it's 3 lines of assertion code per fixture, not a standalone feature). Eliminates overhead without losing coverage. | Keep all 9 (rejected — added process overhead without proportional value) |
 | 2026-03-24 | Orthographic views only: top-down + front | Perspective projection introduces angle distortion that makes pixel-diff unreliable — a shift could be real or just a projection artifact. Orthographic views map pixel positions directly to board positions. Top-down covers X/Y, front covers X/Z. All three dimensions verified without angle correction math. | Perspective-45 + front (rejected — perspective distortion complicates position verification), four angles (rejected — two orthographic + measurement API provides complete coverage) |
 | 2026-03-24 | Auto-generated test report for proving validity to human | Human reviews evidence (report with diffs, screenshots, measurements), not code. Test runner generates the proof automatically — no manual screenshot capturing. | Manual PR screenshots (rejected — tedious, inconsistent, nobody does it reliably) |
