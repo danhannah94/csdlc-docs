@@ -513,16 +513,20 @@ A fixture file fully describes a project state — everything needed to reproduc
 
 #### Standard Camera Angles for 3D Sim Screenshots
 
-Consistent camera angles ensure deterministic screenshots. Start with two angles that cover all three dimensions:
+Consistent camera angles ensure deterministic screenshots. We use **orthographic views only** — perspective projection introduces angle distortion that makes pixel-diff unreliable for position verification (a 5-pixel shift in perspective could be correct or a bug — impossible to tell without angle correction math).
 
-| Angle | Name | Use Case | What It Verifies |
-|-------|------|----------|-----------------|
-| **Default perspective** | `perspective-45` | 45° elevation, front-right corner. Standard for most fixtures. | X/Y/Z positions visible in one shot |
-| **Front orthographic** | `front` | Straight-on front view. Required for edge treatment fixtures. | Which edge a treatment is on (top vs bottom) |
+| Angle | Name | Plane | What It Verifies |
+|-------|------|-------|-----------------|
+| **Top-down orthographic** | `top-down` | X/Y | Cut positions, pocket placement, drill hole locations, shape spacing. Pixel positions map directly to board positions — no distortion. |
+| **Front orthographic** | `front` | X/Z | Edge treatments (top vs bottom), cut depth visualization, which edge a chamfer/dado/rabbet is on. |
 
-Most fixtures use `perspective-45` only. Edge treatment fixtures also capture `front` to verify top vs. bottom edge rendering. Z-depth accuracy is verified by G-code assertions (exact Z values) and the measurement API, not screenshots — screenshots confirm visual placement, G-code confirms exact coordinates.
+Every fixture captures both angles. Between top-down and front, all three dimensions are covered without any angle correction:
 
-Additional angles (`top-down`, `right-side`) can be added later if we find bugs they would have caught. Start lean, expand based on evidence.
+- **X position** — verified by both views
+- **Y position** — verified by top-down
+- **Z depth** — verified by front view + G-code assertions (exact Z values) + measurement API
+
+Pixel-diff on orthographic views is clean and reliable — if something shifts, it's a real change, not a projection artifact. Additional angles can be added later if needed, but these two plus the measurement API provide complete dimensional coverage.
 
 #### File Structure
 
@@ -532,7 +536,8 @@ cncmill-app/src/__fixtures__/
 │   ├── fixture.json          # Input: board + shapes + tools
 │   ├── expected.nc           # Expected G-code output
 │   ├── design.png            # Golden 2D canvas screenshot
-│   └── sim.png               # Golden 3D sim screenshot (perspective-45)
+│   ├── sim-top.png           # Golden 3D sim screenshot (top-down orthographic)
+│   └── sim-front.png         # Golden 3D sim screenshot (front orthographic)
 ├── pocket-rectangle/
 │   └── ...
 ├── drill-basic/
@@ -541,8 +546,8 @@ cncmill-app/src/__fixtures__/
 │   ├── fixture.json
 │   ├── expected.nc
 │   ├── design.png
-│   ├── sim.png               # perspective-45
-│   └── sim-front.png         # front view (verify correct edge)
+│   ├── sim-top.png           # top-down (verify X/Y position)
+│   └── sim-front.png         # front (verify which edge the chamfer is on)
 ├── svg-engrave/
 │   └── ...
 └── multi-operation/          # Comprehensive: multiple ops on one board
@@ -897,7 +902,7 @@ graph TD
 | 2026-03-24 | E2E validation records are pass/fail with comments; photos optional | Photos are documentation, not test mechanisms. Consistent physical photos are impractical. | Mandatory photos (rejected — too rigid, inconsistent results) |
 | 2026-03-24 | AI interface as core architectural pattern for AI-designed apps | If AI designs, writes, tests, and will power features of the app — a first-class AI interaction layer is as fundamental as choosing state management. Should be considered for all CSDLC projects. | Treat as optional tooling (rejected — misses the architectural significance) |
 | 2026-03-24 | Consolidated features: 7 instead of 9 | Comprehensive fixture absorbed into F3 (it's just another fixture). Cross-layer measurement tests absorbed into F5 (it's 3 lines of assertion code per fixture, not a standalone feature). Eliminates overhead without losing coverage. | Keep all 9 (rejected — added process overhead without proportional value) |
-| 2026-03-24 | Two camera angles (perspective-45 + front), not four | Perspective-45 shows X/Y/Z. Front shows edge treatments. Z-depth verified by G-code assertions + measurement API, not screenshots. Start lean, add angles based on evidence. | Four angles (rejected — top-down and right-side add maintenance without catching bugs the other two miss) |
+| 2026-03-24 | Orthographic views only: top-down + front | Perspective projection introduces angle distortion that makes pixel-diff unreliable — a shift could be real or just a projection artifact. Orthographic views map pixel positions directly to board positions. Top-down covers X/Y, front covers X/Z. All three dimensions verified without angle correction math. | Perspective-45 + front (rejected — perspective distortion complicates position verification), four angles (rejected — two orthographic + measurement API provides complete coverage) |
 | 2026-03-24 | Auto-generated test report for proving validity to human | Human reviews evidence (report with diffs, screenshots, measurements), not code. Test runner generates the proof automatically — no manual screenshot capturing. | Manual PR screenshots (rejected — tedious, inconsistent, nobody does it reliably) |
 
 ---
