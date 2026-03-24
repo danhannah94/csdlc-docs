@@ -190,18 +190,19 @@ graph LR
 
 ### CI/CD Strategy
 
-**Local-first approach: all tests run locally as part of the sub-agent development workflow. GitHub Actions CI deferred until team size or failure rate justifies the overhead.**
+**Split approach: text-based tests run locally as part of sub-agent verification. Visual regression tests run in GitHub Actions CI.**
 
 | Test Type | Where It Runs | Why |
 |-----------|--------------|-----|
-| Unit tests | **Local (Vitest)** | AI Lead runs before every PR. Sub-agent verification step. |
+| Unit tests | **Local (Vitest)** | Fast, sub-agent runs before every PR. Agent template enforces this. |
 | G-code integration tests | **Local (Vitest)** | Deterministic string comparison. Sub-agent includes markdown report in PR description. |
-| Visual regression tests (screenshots) | **Local (Playwright + pixelmatch)** | Browser-dependent, flaky across environments. Local ensures consistency. |
+| Visual regression tests | **GitHub Actions CI** | Screenshot capture + pixel-diff needs consistent environment. CI auto-posts PR comment with before/after diff images. Eliminates manual screenshot uploading. |
+| Cross-layer coordinate assertions | **Local (Vitest)** | Pure math — `measureFromEdge()` vs parsed G-code positions. No browser needed. |
 | E2E (physical validation) | **Local only** | Human runs the CNC machine. |
 
-The sub-agent development workflow makes traditional CI/CD less critical — the AI Lead reviews and runs all tests before PRs are created. No PR has shipped with broken tests to date. The agent prompt template in WORKFLOW.md ensures every sub-agent runs integration tests as a verification step.
+**Why the split:** Text-based tests (unit, G-code integration, cross-layer) are deterministic and fast — sub-agents run them locally before creating PRs. No PR has shipped with broken tests to date. Visual tests have a different workflow problem: they produce screenshot artifacts that need to be attached to PRs, and rendering consistency matters (same browser/OS). GitHub Actions solves both — Playwright runs in a consistent environment, diff images upload as artifacts, and the action auto-posts a PR comment with the visual report.
 
-**Future: GitHub Actions CI.** When the team grows beyond one human + one AI Lead, or when a regression slips through, add CI as a required status check. The test infrastructure is CI-ready (Vitest, no browser needed for G-code tests) — it's a configuration task, not a rewrite. Tracked as a Future ticket.
+**Future: Expand CI.** Unit and G-code integration tests can be added to CI when team size or failure rate justifies it. The infrastructure is CI-ready (Vitest, no browser needed).
 
 ---
 
@@ -855,7 +856,7 @@ Features extracted from this epic. Each becomes a set of implementable stories d
 | F2 | **MCP Server (routr-tools)** — Separate package, Model Context Protocol wrapper for AI-driven testing and future product features | F1 | |
 | F3 | **Test Fixture Library** — JSON fixture format, TypeScript types, initial set of fixtures (including comprehensive multi-operation fixture) | F1 | |
 | F4 | **G-code Integration Tests** — Load fixture → generate G-code → assert matches `.expected.nc` + CI pipeline + test report generation | F1, F3 | |
-| F5 | **Visual Regression + Cross-Layer Tests** — Playwright harness for 2D + 3D screenshot capture, pixel-diff, fixed camera angles, AND cross-layer measurement assertions (2D dims = 3D dims) | F1, F3, F6 | |
+| F5 | **Visual Regression + Cross-Layer Tests** — Playwright harness for 2D + 3D screenshot capture, pixel-diff, fixed camera angles, AND cross-layer coordinate assertions (design measurements vs G-code positions) | F1, F3 | |
 | F6 | **In-App Measurement Tool** — Point-to-point and shape-to-edge measurement in both 2D design tab and 3D sim tab, top toolbar "Measure" mode (Fusion 360 style) | F1 | |
 | F7 | **Physical Validation Protocol** — Lightweight pass/fail recording, validation matrix tracker | F3, F6 | |
 
@@ -865,8 +866,7 @@ graph TD
     F1 --> F3["F3: Test Fixture Library<br/>(incl. comprehensive fixture)"]
     F1 --> F6["F6: In-App Measurement Tool<br/>(2D + 3D, Fusion 360 style)"]
     F3 --> F4["F4: G-code Integration Tests<br/>+ CI Pipeline + Test Report"]
-    F3 --> F5["F5: Visual Regression +<br/>Cross-Layer Measurement Tests"]
-    F6 --> F5
+    F3 --> F5["F5: Visual Regression +<br/>Cross-Layer Coordinate Tests"]
     F3 --> F7["F7: Physical Validation<br/>Protocol (lightweight)"]
     F6 --> F7
     F2 --> |"Enables protagonist/<br/>antagonist pattern"| F4
@@ -887,8 +887,8 @@ Stories are organized into dependency-ordered batches:
 Batch 1: F1 (AI Interface) → F3 (Fixtures) → F4 (G-code Integration Tests)
   → First real regression protection, fast feedback loop
 
-Batch 2: F2 (MCP Server) → F5 (Visual Regression + Cross-Layer)
-  → External AI access, screenshot baselines, measurement assertions
+Batch 2: F5 (Visual Regression + Cross-Layer) → F2 (MCP Server)
+  → Screenshot baselines, cross-layer assertions, GitHub Actions visual CI, then external AI access
 
 Batch 3: F7 (Physical Validation Protocol)
   → Human on the CNC, protocol + recording templates
@@ -1028,6 +1028,52 @@ graph TD
 
 ---
 
+### F5: Visual Regression + Cross-Layer Tests — Stories
+
+**Dependency graph:**
+
+```mermaid
+graph TD
+    S1["F5-S1: Playwright Infrastructure<br/>& Screenshot Capture"] --> S2["F5-S2: Visual Regression<br/>Test Suite"]
+    S3["F5-S3: Cross-Layer<br/>Coordinate Assertions"] --> S4["F5-S4: GitHub Actions<br/>Visual CI"]
+    S2 --> S4
+
+    F1_S5["F1-S5: Canvas Capture"] -.-> S1
+    F1_S6["F1-S6: Measurement Engine"] -.-> S3
+    F3["F3: Fixture Library"] -.-> S2
+    F3 -.-> S3
+    F4_S1["F4-S1: G-code Test Harness"] -.-> S3
+
+    style S1 fill:#e67e22,color:#fff
+    style S2 fill:#e67e22,color:#fff
+    style S3 fill:#3498db,color:#fff
+    style S4 fill:#e67e22,color:#fff
+    style F1_S5 fill:#555,color:#fff
+    style F1_S6 fill:#555,color:#fff
+    style F3 fill:#555,color:#fff
+    style F4_S1 fill:#555,color:#fff
+```
+
+*🟠 Orange = Playwright chain (serial — S1 → S2 → S4). 🔵 Blue = S3 is independent (Vitest, no browser) and can run in parallel with S1/S2.*
+
+#### Design Notes
+
+- **F6 dependency removed.** The measurement engine (`measureFromEdge`, `measureDistance`) shipped in F1-S6. F5's cross-layer assertions use the programmatic API, not the measurement tool UI. F6 (UI) is fully decoupled — separate epic.
+- **Cross-layer assertion model:** Three sources of truth that must agree: ① `measureFromEdge()` returns the design intent (shape position relative to board edge), ② G-code output contains the execution positions (parsed X/Y/Z coordinates), ③ Screenshots show the visual position in both design and sim tabs. F5-S3 asserts ① vs ② programmatically. F5-S2 captures ③ for visual verification. A coordinate flip bug (like the kerf line flip) would cause ① and ② to disagree — the shape is at X=100 from the left, but the G-code moves to X=100 from the *right*.
+- **No dedicated toolpath measurement API.** Parsing G-code X/Y positions and comparing against `measureFromEdge()` achieves cross-layer detection without a new API. If this proves too brittle after F5 ships, a `measureToolpathFromEdge()` API can be added as a follow-up.
+- **Visual tests run on every PR via GitHub Actions.** Even non-UI changes can shift rendering (toolpath algorithm changes, coordinate fixes). The whole point is catching *unexpected* visual changes. 30-60 seconds is acceptable overhead.
+- **Golden baselines committed to git.** ~21 PNG files (~5-10MB total) in `src/__fixtures__/` alongside fixture JSON and `.expected.nc` files. Manageable at current fixture count. Revisit with Git LFS if fixture count grows significantly. Diff images are ephemeral GitHub Actions artifacts (auto-expire, no repo bloat).
+- **Pixel-diff tolerance.** Anti-aliasing causes 1-2% pixel variation across renders. Tests use a tolerance threshold (configurable per fixture if needed). `pixelmatch` library handles this — same library Playwright uses internally.
+
+| Story | Name | Size | Description | Acceptance Criteria |
+|-------|------|------|-------------|-------------------|
+| **F5-S1** | Playwright Infrastructure & Screenshot Capture | Medium | Set up Playwright test infrastructure for the cncmill-app: config file, dev server lifecycle, screenshot capture helpers, and baseline management utilities. This is the foundation for all visual testing. | ① `playwright.config.ts` created with: `webServer` config that auto-starts Vite dev server on a test port (e.g., 5183), headless Chromium browser, locked viewport `1280×720`, base URL pointing to the test server. ② Screenshot capture helper function that: navigates to the app, loads a fixture via `window.__routr.loadFixture()`, switches to the target tab (Board Setup / Simulator), waits for render completion, and captures a PNG screenshot. ③ Helper supports the two standard camera angles for sim tab: `top-down` and `front` (using `window.__routr.captureSimCanvas()` angle parameter or equivalent Playwright interaction). ④ Design tab capture uses `captureDesignCanvas()` or direct Playwright screenshot of the canvas element. ⑤ Baseline management: `--update` flag regenerates golden screenshots. Without the flag, tests compare against existing baselines. ⑥ `npm run test:integration:visual` added to `package.json` — runs Playwright visual tests. ⑦ Playwright and `pixelmatch` (or equivalent pixel-diff library) added as dev dependencies. |
+| **F5-S2** | Visual Regression Test Suite | Medium | Create the Playwright test suite that auto-discovers fixtures, captures screenshots from both the 2D design tab and 3D sim tab, and pixel-diffs against golden baselines. Each fixture produces up to 3 screenshots: `design.png`, `sim-top.png`, `sim-front.png`. | ① Test file `src/__tests__/integration/visual.test.ts` (or Playwright test equivalent) auto-discovers all `*.fixture.json` files in `src/__fixtures__/`. ② For each fixture: loads via `loadFixture()`, captures design tab screenshot, captures sim tab at top-down angle, captures sim tab at front angle. ③ Compares each screenshot against golden baseline using pixel-diff with configurable tolerance (default ~1-2% pixel difference threshold). ④ Fixtures without golden screenshots (no `.design.png` etc.) are skipped, not failed — same pattern as F4's G-code baseline handling. ⑤ On diff failure: generates a diff image highlighting changed pixels (red overlay on a combined before/after image). Diff images saved to a test output directory. ⑥ Test output includes per-fixture results: ✅ PASS (within tolerance), ❌ FAIL (diff percentage + diff image path), ⏭️ SKIPPED (no baseline). ⑦ `npm run test:integration:visual -- --update` regenerates all golden screenshots (same `--update` pattern from S1). ⑧ All existing tests (unit + G-code integration) continue to pass. |
+| **F5-S3** | Cross-Layer Coordinate Assertions | Small | Create Vitest tests that assert design-intent measurements are consistent with G-code output positions. This is the programmatic detection mechanism for coordinate flip bugs — no browser needed, pure math + string parsing. | ① Test file `src/__tests__/integration/cross-layer.test.ts` auto-discovers fixtures in `src/__fixtures__/`. ② For each fixture: loads via `loadFixture()`, calls `measureFromEdge()` for each shape on relevant edges (left, right, top, bottom), calls `generateGcode()`, parses G-code for operation X/Y positions. ③ Asserts that `measureFromEdge()` distances are consistent with G-code positions within a tolerance (±0.1mm to account for floating point). ④ For edge treatments: asserts the G-code Z positions are consistent with top vs bottom edge placement — a chamfer on the top edge should have different Z coordinates than a chamfer on the bottom edge. ⑤ A coordinate flip bug (shape at X=100 from left, G-code at X=100 from right) causes a clear test failure with a descriptive message: "Shape X is 47mm from left edge but G-code moves to X=153 (expected X=47)." ⑥ Fixtures without baselines are skipped (consistent with F4/F5-S2 pattern). ⑦ `npm run test:integration:cross-layer` added to `package.json`. ⑧ Runs in Vitest (no browser required) — fast enough for local sub-agent verification. |
+| **F5-S4** | GitHub Actions Visual CI | Medium | Create a GitHub Actions workflow that runs visual regression tests on every PR, uploads diff images as artifacts, and posts a PR comment with the visual test report including before/after screenshot comparisons. | ① `.github/workflows/visual-tests.yml` workflow triggered on PRs to `main`. ② Workflow steps: checkout, install Node + deps, install Playwright browsers (`npx playwright install --with-deps chromium`), run `npm run test:integration:visual`. ③ On test failure: diff images uploaded as GitHub Actions artifacts (auto-expire after 30 days). ④ Workflow posts a PR comment with the visual test report: per-fixture pass/fail/skipped status, and for failures, embedded diff images (referenced from artifacts or committed to a temporary location). ⑤ On test success: brief PR comment confirming all visual tests pass, with screenshot count. ⑥ Workflow configured as a **required status check** — PRs cannot merge with visual regression failures without explicit baseline update. ⑦ Workflow runs in under 3 minutes for the initial fixture set. ⑧ `README.md` or `WORKFLOW.md` updated with instructions for: how to update visual baselines locally (`npm run test:integration:visual -- --update`), how to interpret CI visual test failures, and how to review diff images from artifacts. |
+
+---
+
 ## Decisions Log
 
 | Date | Decision | Rationale | Alternatives Considered |
@@ -1063,12 +1109,16 @@ graph TD
 | 2026-03-26 | Fixture validation script as F3 quality gate | The script is how the AI Lead proves to the human that F3 is complete — "all fixtures load and generate G-code without errors." Without it, F3 is just JSON files with no proof they work. | No validation script (rejected — no quality gate) |
 | 2026-03-26 | Fixtures in `src/__fixtures__/` (not alongside tests) | Fixtures are consumed by F4, F5, AND F7 — shared test data, not coupled to one test suite. Central location keeps them accessible to all downstream consumers. | Alongside devApi tests (rejected — couples to one consumer) |
 | 2026-03-26 | Keep stories in epic doc (don't split) | One epic, one doc. F1 stories already live here. Splitting creates navigation friction ("which doc?"). Context fatigue managed by not loading the full doc in sub-agent prompts, not by splitting the source of truth. | Separate stories doc (rejected — navigation overhead, split source of truth) |
-| 2026-03-26 | Defer GitHub Actions CI — local-first testing | No PR has shipped with broken tests. AI Lead runs all tests before every PR. CI adds setup/maintenance overhead for a problem that doesn't exist yet. Test infrastructure is CI-ready when needed. | CI from day one (rejected — overhead without demonstrated need) |
+| 2026-03-26 | Split CI strategy: local for text tests, GitHub Actions for visual tests | Text-based tests (unit, G-code, cross-layer) are deterministic and fast — local sub-agent verification is sufficient. Visual tests have a unique workflow problem: screenshot artifacts need consistent rendering environments and attachment to PRs. GitHub Actions solves both. Not CI for CI's sake — CI where it solves a real problem. | All local (rejected — manual screenshot uploading is clunky), All CI (rejected — overhead for text tests that don't need it) |
 | 2026-03-26 | Consolidate baseline management in F3 | F3-S5's validation script handles baseline generation/regeneration. F4 reads baselines and asserts. One tool, one command, one place to maintain. Avoids two scripts doing the same thing. | Separate F4 update command (rejected — duplication) |
 | 2026-03-26 | F4 test harness auto-discovers fixtures | Single test file dynamically discovers `*.fixture.json` files. Adding a new fixture automatically adds a test case — zero boilerplate. | Per-fixture test files (rejected — manual maintenance, boilerplate) |
 | 2026-03-26 | Fixtures without baselines → skipped (not failed) | `straight-cut-basic` blocked on kerf flip. Skipping is accurate — "no baseline" ≠ "test failed." When baseline is generated, test automatically activates. | Skip fixture entirely (rejected — loses visibility), Fail (rejected — inaccurate) |
 | 2026-03-26 | Markdown test report (not HTML) for F4 | Renders natively in GitHub PR descriptions. Sub-agents paste report directly into PR body. HTML makes sense for F5 when screenshot galleries are needed. | HTML report (rejected for F4 — no screenshots to display, adds hosting complexity) |
 | 2026-03-26 | Update WORKFLOW.md agent template as part of F4 | Sub-agents must run integration tests as a verification step. Template update ensures this is baked into every future sub-agent prompt. Compensates for deferred CI — the template IS the quality gate. | Separate ticket (rejected — tightly coupled to F4's test harness) |
+| 2026-03-26 | F5 dependency on F6 removed | Measurement engine shipped in F1-S6. F5 cross-layer assertions use the programmatic API, not the measurement tool UI. F6 (UI) is a separate epic. F5 moves from Batch 2 dependency chain to directly after F3/F4. | Keep F6 dependency (rejected — F6 UI not needed for programmatic assertions) |
+| 2026-03-26 | Cross-layer assertion: measureFromEdge vs parsed G-code positions | Three sources of truth (measurement API, G-code, screenshots) must agree. Programmatic assertion compares ① and ② without a dedicated toolpath measurement API. G-code X/Y parsing is sufficient. Add `measureToolpathFromEdge()` later if this proves brittle. | Build toolpath measurement API first (rejected — premature, G-code parsing achieves the same detection) |
+| 2026-03-26 | Golden screenshots committed to git, diff images as CI artifacts | ~21 PNGs (~5-10MB) is manageable in git. Diff images are ephemeral (auto-expire from GitHub Actions). No orphan branch gymnastics. Revisit with Git LFS if fixture count grows. | Git LFS (rejected — tooling overhead at current scale), Orphan branch (rejected — CI artifacts are cleaner) |
+| 2026-03-26 | Visual tests run on every PR, not gated by file changes | Non-UI changes can shift rendering (toolpath algorithm, coordinate fixes). Gating on file changes misses exactly the bug class we're catching. 30-60 seconds is acceptable. | Only run on UI file changes (rejected — misses the point) |
 | 2026-03-24 | Orthographic views only: top-down + front | Perspective projection introduces angle distortion that makes pixel-diff unreliable — a shift could be real or just a projection artifact. Orthographic views map pixel positions directly to board positions. Top-down covers X/Y, front covers X/Z. All three dimensions verified without angle correction math. | Perspective-45 + front (rejected — perspective distortion complicates position verification), four angles (rejected — two orthographic + measurement API provides complete coverage) |
 | 2026-03-24 | Auto-generated test report for proving validity to human | Human reviews evidence (report with diffs, screenshots, measurements), not code. Test runner generates the proof automatically — no manual screenshot capturing. | Manual PR screenshots (rejected — tedious, inconsistent, nobody does it reliably) |
 
