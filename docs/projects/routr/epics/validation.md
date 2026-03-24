@@ -946,6 +946,52 @@ These findings informed story scoping:
 
 ---
 
+### F3: Test Fixture Library — Stories
+
+**Dependency graph:**
+
+```mermaid
+graph TD
+    S1["F3-S1: Fixture Schema,<br/>Types & Validation"] --> S2["F3-S2: Core Operation<br/>Fixtures + Baselines"]
+    S1 --> S3["F3-S3: Edge Treatment<br/>Fixtures + Baselines"]
+    S1 --> S4["F3-S4: Multi-Operation<br/>Fixture + Baseline"]
+    S2 --> S5["F3-S5: Fixture<br/>Validation Script"]
+    S3 --> S5
+    S4 --> S5
+
+    S5 -.-> F4["F4: G-code Integration Tests"]
+    S5 -.-> F5["F5: Visual Regression"]
+    S5 -.-> F7["F7: Physical Validation"]
+
+    style S1 fill:#e67e22,color:#fff
+    style S2 fill:#3498db,color:#fff
+    style S3 fill:#3498db,color:#fff
+    style S4 fill:#3498db,color:#fff
+    style S5 fill:#e67e22,color:#fff
+    style F4 fill:#555,color:#fff
+    style F5 fill:#555,color:#fff
+    style F7 fill:#555,color:#fff
+```
+
+*🟠 Orange = serial (must happen in order). 🔵 Blue = parallelizable after S1.*
+
+#### Design Notes
+
+- **Fixture format**: Each fixture is a standalone JSON file in `src/__fixtures__/` containing board config, shapes, tool settings, and optionally edge treatments. The JSON schema matches the `TestFixture` type from F1-S1.
+- **Baseline convention**: Each fixture `{name}.fixture.json` has a corresponding `{name}.expected.nc` in the same directory. Fixtures without baselines (e.g., blocked on a bug) have no `.expected.nc` file — the validation script skips baseline assertions for these.
+- **Baseline generation**: Baselines are generated via `window.__routr` — load fixture → `generateGcode()` → write output as `.expected.nc`. This means baselines reflect the *current* G-code pipeline output. When the pipeline changes intentionally, baselines are regenerated. When it changes unintentionally, F4's integration tests catch the drift.
+- **`straight-cut-basic` is blocked**: The table saw kerf line flip bug means this fixture's baseline would encode incorrect behavior. Create the fixture JSON (the board config is valid), skip the baseline. Revisit after the kerf fix ships.
+
+| Story | Name | Size | Description | Acceptance Criteria |
+|-------|------|------|-------------|-------------------|
+| **F3-S1** | Fixture Schema, Types & Validation Utilities | Small | Define the canonical fixture JSON schema, TypeScript types (leveraging F1-S1's `TestFixture` type), and a validation utility that confirms a fixture file is well-formed before use. This is the contract that F4, F5, and F7 all depend on. | ① Fixture JSON schema is documented in a `README.md` inside `src/__fixtures__/` — human-readable description of every field, required vs. optional, valid values. ② TypeScript `validateFixture(json: unknown): TestFixture` function that parses raw JSON, validates required fields, checks shape/operation types against allowed values, and returns a typed `TestFixture` or throws descriptive errors. ③ Validation catches: missing board dimensions, invalid shape types, missing tool settings for operations that require them, edge treatment referencing non-existent edges. ④ `src/__fixtures__/` directory created with README and validation utility. ⑤ Unit tests cover: valid fixture passes, missing required fields rejected, invalid shape type rejected, optional fields default gracefully, edge treatment validation. |
+| **F3-S2** | Core Operation Fixtures + Baselines | Medium | Create fixture JSON files and `.expected.nc` G-code baselines for the core CNC operations: router pocket, drill, profile cut, and table saw straight cut. These cover the bread-and-butter operations users will run most. | ① `pocket-rectangle.fixture.json` — single board, one rectangular pocket shape, standard tool settings. Corresponding `pocket-rectangle.expected.nc` baseline generated via `window.__routr`. ② `drill-basic.fixture.json` — single board, one drill hole. Corresponding `.expected.nc` baseline. ③ `profile-cut.fixture.json` — single board, profile cut operation with tabs. Corresponding `.expected.nc` baseline. ④ `straight-cut-basic.fixture.json` — single board, table saw vertical cut. **No `.expected.nc` baseline** (blocked on kerf line flip bug). JSON fixture is valid and passes `validateFixture()`. ⑤ All fixture JSON files pass `validateFixture()`. ⑥ All baselines are generated deterministically — running generation twice produces identical output. ⑦ Each `.expected.nc` contains valid G-code structure: header (`G21`, `G90`), spindle start (`M3`), operations, spindle stop (`M5`), program end (`M2` or `M30`). |
+| **F3-S3** | Edge Treatment Fixtures + Baselines | Small | Create fixture JSON files and `.expected.nc` baselines for edge treatment operations. These specifically target the coordinate bug class that triggered this epic — chamfers on top vs. bottom edges must produce demonstrably different G-code. | ① `edge-chamfer-top.fixture.json` — single board, chamfer on top edge, appropriate chamfer bit in tool settings. Corresponding `.expected.nc` baseline. ② `edge-chamfer-bottom.fixture.json` — single board, chamfer on bottom edge, same bit. Corresponding `.expected.nc` baseline. ③ The two baselines are **verifiably different** — a diff between them shows Z-axis and/or coordinate differences consistent with top vs. bottom edge placement. This is the regression test for the coordinate flip bug class. ④ All fixtures pass `validateFixture()`. ⑤ Baselines generated deterministically. |
+| **F3-S4** | Multi-Operation Fixture + Baseline | Medium | Create a comprehensive fixture that combines multiple operation types on a single board — the "torture test" that exercises the full G-code pipeline. This fixture is the most valuable regression detector because changes to any operation type will show up here. | ① `multi-operation.fixture.json` — single board with: at least one pocket, at least one drill hole, a profile cut, and at least one edge treatment. Realistic dimensions and tool settings (not contrived). ② Corresponding `multi-operation.expected.nc` baseline. ③ Baseline contains distinct G-code sections for each operation type — identifiable by comments or tool change commands. ④ Fixture passes `validateFixture()`. ⑤ Baseline generated deterministically. ⑥ A brief comment block at the top of the fixture JSON (or in the README) describes what this fixture is designed to catch — it's the "if only one fixture survives, keep this one" fixture. |
+| **F3-S5** | Fixture Validation Script | Small | Create a script that loads every fixture in `src/__fixtures__/`, validates it, generates G-code, and confirms no errors. This is F3's quality gate — the proof that all fixtures are well-formed and functional. Also generates/regenerates `.expected.nc` baselines on demand. | ① `scripts/validate-fixtures.ts` (or `.mjs`) script that: discovers all `*.fixture.json` files in `src/__fixtures__/`, runs `validateFixture()` on each, loads each via `window.__routr.loadFixture()`, calls `generateGcode()`, and reports pass/fail per fixture. ② Script has two modes: `--validate` (default — load + generate + confirm no errors, compare against existing baselines if present) and `--generate` (load + generate + write/overwrite `.expected.nc` files). ③ In `--validate` mode, if a fixture has no `.expected.nc` (e.g., `straight-cut-basic`), it still validates the fixture loads and generates G-code without errors — it just skips the baseline comparison. ④ Script exits with non-zero code if any fixture fails validation or baseline mismatch. ⑤ Output is human-readable: fixture name, status (✅/❌), and error details on failure. ⑥ Script can run in CI (no browser required — uses Vitest or Node environment with `window.__routr` available). ⑦ `npm run validate-fixtures` added to `package.json` scripts. |
+
+---
+
 ## Decisions Log
 
 | Date | Decision | Rationale | Alternatives Considered |
@@ -976,6 +1022,11 @@ These findings informed story scoping:
 | 2026-03-25 | Keep F1-S2 and F1-S3 as separate stories | S2 (fixture loading) is the most complex F1 story — JSON→Zustand mapping, state clearing, validation. S3 (G-code hooks) is thin wrappers. Separating them keeps S2 focused and prevents delays if fixture loading hits complications. | Combine S2+S3 (rejected — reliability over speed) |
 | 2026-03-25 | Implementation batches: F1→F3→F4, then F2→F5, then F7 | Fastest path to regression protection (Batch 1). MCP layer comes online when there's something to wrap (Batch 2). Physical validation last since it depends on everything + machine time (Batch 3). | Build MCP first (rejected — nothing to wrap yet) |
 | 2026-03-24 | Consolidated features: 7 instead of 9 | Comprehensive fixture absorbed into F3 (it's just another fixture). Cross-layer measurement tests absorbed into F5 (it's 3 lines of assertion code per fixture, not a standalone feature). Eliminates overhead without losing coverage. | Keep all 9 (rejected — added process overhead without proportional value) |
+| 2026-03-26 | Generate `.expected.nc` baselines in F3, not F4 | Eliminates ambiguity about F4 scope — F4 is purely "build the test harness + reporting." F3 delivers complete fixture packages (JSON + baseline). | Defer baselines to F4 (rejected — makes F4 scope ambiguous) |
+| 2026-03-26 | Create `straight-cut-basic` fixture without baseline | Fixture JSON is valid regardless of kerf flip bug. Baseline deferred until bug is fixed. Validation script skips baseline comparison when no `.expected.nc` exists. | Skip fixture entirely (rejected — wastes valid work), Create baseline with known-bad output (rejected — encodes incorrect behavior) |
+| 2026-03-26 | Fixture validation script as F3 quality gate | The script is how the AI Lead proves to the human that F3 is complete — "all fixtures load and generate G-code without errors." Without it, F3 is just JSON files with no proof they work. | No validation script (rejected — no quality gate) |
+| 2026-03-26 | Fixtures in `src/__fixtures__/` (not alongside tests) | Fixtures are consumed by F4, F5, AND F7 — shared test data, not coupled to one test suite. Central location keeps them accessible to all downstream consumers. | Alongside devApi tests (rejected — couples to one consumer) |
+| 2026-03-26 | Keep stories in epic doc (don't split) | One epic, one doc. F1 stories already live here. Splitting creates navigation friction ("which doc?"). Context fatigue managed by not loading the full doc in sub-agent prompts, not by splitting the source of truth. | Separate stories doc (rejected — navigation overhead, split source of truth) |
 | 2026-03-24 | Orthographic views only: top-down + front | Perspective projection introduces angle distortion that makes pixel-diff unreliable — a shift could be real or just a projection artifact. Orthographic views map pixel positions directly to board positions. Top-down covers X/Y, front covers X/Z. All three dimensions verified without angle correction math. | Perspective-45 + front (rejected — perspective distortion complicates position verification), four angles (rejected — two orthographic + measurement API provides complete coverage) |
 | 2026-03-24 | Auto-generated test report for proving validity to human | Human reviews evidence (report with diffs, screenshots, measurements), not code. Test runner generates the proof automatically — no manual screenshot capturing. | Manual PR screenshots (rejected — tedious, inconsistent, nobody does it reliably) |
 
