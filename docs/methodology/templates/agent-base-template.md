@@ -27,6 +27,25 @@ npm run build        # Must succeed
 npm test -- --run    # Must pass ALL tests (existing + new)
 ```
 
+### Integration Tests *(If Configured)*
+
+If the project has integration tests, run them before submitting:
+
+```bash
+# G-code / output assertion tests (fast, deterministic)
+npm run test:integration:gcode     # Must pass
+
+# Visual regression tests (requires browser)
+npm run test:integration:visual    # Must pass
+```
+
+If your change **intentionally alters** test output:
+
+1. Review the diffs carefully — do the changes look correct?
+2. Update baselines: `npm run test:integration -- --update`
+3. Include baseline diffs in the PR description for human review
+4. **Do NOT rubber-stamp baseline updates** — review every diff
+
 !!! warning "Do not skip verification"
     Every PR must pass build and tests before submission. No exceptions.
 

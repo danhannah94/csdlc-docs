@@ -117,6 +117,48 @@ Be honest about where the system is vulnerable. What's mitigated, what's accepte
 
 ---
 
+## AI Interface Architecture *(Optional)*
+
+*Consider this section for any project where AI agents will interact with the application — for testing, automation, or as a product feature. See [Routr's Validation Pipeline](../../projects/routr/epics/validation.md) for a concrete example.*
+
+### Dev-Mode API
+
+Does this project expose a programmatic interface for AI agents to drive the application?
+
+```typescript
+// Example: window.__yourApp = { ... }
+```
+
+| Capability | Method | Purpose |
+|-----------|--------|---------|
+| | | |
+
+### Exposure Strategy
+
+| Environment | Available? | How? |
+|-------------|:----------:|------|
+| Development | Yes / No | Always-on / feature flag |
+| Staging | Yes / No | Feature flag / restricted |
+| Production | Yes / No | Only when a product feature requires it |
+
+### MCP Server *(If Applicable)*
+
+If AI agents need to drive the app from outside the browser (testing, product features, integrations):
+
+- **Package strategy**: Separate package or embedded in app?
+- **Tool surface**: What capabilities does the MCP server expose?
+- **Connection model**: Playwright bridge to browser, direct engine calls, or both?
+
+### Why This Matters
+
+The AI interface isn't just developer tooling — it's an architectural layer. Applications designed for AI interaction get:
+
+- **Reliable testing**: Direct function calls instead of fragile UI automation
+- **AI-driven features**: The same hooks that power testing become the foundation for AI product features
+- **Speed**: Programmatic access is orders of magnitude faster than Playwright UI clicking
+
+---
+
 ## Cross-Cutting Concerns
 
 Architectural concerns that span multiple epics. These aren't features — they're constraints, conventions, or systems that every epic needs to be aware of.
