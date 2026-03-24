@@ -739,6 +739,42 @@ graph TD
 - Run on consistent environment (same browser version)
 - If a test is persistently flaky, increase tolerance or switch to structural assertion
 
+**Mass baseline updates (UI changes):**
+
+When a UI change (CSS restyle, canvas rendering update, theme tweak) breaks multiple visual baselines at once:
+
+1. Run `npm run test:integration:visual` — see which fixtures fail
+2. Run `npm run test:integration:visual -- --update` — regenerate all screenshot baselines
+3. Review the **batch diff** — a gallery of before/after screenshots across all fixtures
+4. Verify: do the new visuals look correct? Is anything unexpectedly shifted or missing?
+5. Commit the updated baselines with the UI change PR
+
+This is working as designed — a UI change SHOULD force review of all visual baselines. The test breakage surfaces the full visual impact of the change. G-code and measurement tests are unaffected by pure UI changes, so those still pass and confirm the engine is untouched.
+
+**Agent prompt template — integration test section:**
+
+Every sub-agent prompt for implementation work should include:
+
+```
+## Verification
+After implementation:
+1. Run `npm test -- --run` — all unit tests must pass
+2. Run `npm run test:integration:gcode` — all G-code assertions must pass
+3. If your change affects G-code output:
+   - Review the diffs carefully
+   - Update baselines with `npm run test:integration:gcode -- --update`
+   - Include baseline diffs in PR description for human review
+4. If your change affects UI rendering:
+   - Run `npm run test:integration:visual`
+   - Update baselines with `npm run test:integration:visual -- --update`
+   - Include before/after screenshot comparisons in PR description
+5. Do NOT rubber-stamp baseline updates — review every diff
+```
+
+**Antagonist agent (optional, for complex changes):**
+
+The antagonist is NOT a sub-agent that runs on every PR. It's a separate agent spawned by the AI Lead when extra confidence is needed — typically for new operation types, coordinate-affecting changes, or complex multi-system features. The antagonist connects via MCP and runs exploratory tests. Its findings are advisory — the human makes the final call.
+
 ---
 
 ## Edge Cases & Gotchas
@@ -783,31 +819,31 @@ Features extracted from this epic. Each becomes a set of implementable stories d
 | Feature | Summary | Dependencies | Status |
 |---------|---------|-------------|--------|
 | F1 | **AI-Accessible Interface** — `window.__routr` dev-mode API: fixture loading, G-code generation, canvas capture, measurement | None | |
-| F2 | **Test Fixture Library** — JSON fixture format, TypeScript types, initial set of fixtures | F1 | |
-| F3 | **G-code Integration Tests** — Load fixture → generate G-code → assert matches `.expected.nc` + CI pipeline | F1, F2 | |
-| F4 | **Visual Regression Tests** — Playwright harness for 2D + 3D screenshot capture, pixel-diff against golden images, fixed camera angles | F1, F2 | |
-| F5 | **In-App Measurement Tool** — Point-to-point and shape-to-edge measurement in both 2D design tab and 3D sim tab, top toolbar "Measure" mode | F1 | |
-| F6 | **Cross-Layer Measurement Tests** — Automated assertions that 2D design dimensions match 3D sim dimensions | F1, F2, F5 | |
-| F7 | **Physical Validation Protocol** — Measurement recording template, validation matrix tracker | F2, F5 | |
-| F8 | **Comprehensive Fixture** — Multi-operation board exercising full pipeline | F2, F3, F4, F6 | |
-| F9 | **MCP Server (routr-tools)** — Separate package, Model Context Protocol wrapper for AI-driven testing and future product features | F1 | |
+| F2 | **MCP Server (routr-tools)** — Separate package, Model Context Protocol wrapper for AI-driven testing and future product features | F1 | |
+| F3 | **Test Fixture Library** — JSON fixture format, TypeScript types, initial set of fixtures | F1 | |
+| F4 | **G-code Integration Tests** — Load fixture → generate G-code → assert matches `.expected.nc` + CI pipeline | F1, F3 | |
+| F5 | **Visual Regression Tests** — Playwright harness for 2D + 3D screenshot capture, pixel-diff against golden images, fixed camera angles | F1, F3 | |
+| F6 | **In-App Measurement Tool** — Point-to-point and shape-to-edge measurement in both 2D design tab and 3D sim tab, top toolbar "Measure" mode | F1 | |
+| F7 | **Cross-Layer Measurement Tests** — Automated assertions that 2D design dimensions match 3D sim dimensions | F1, F3, F6 | |
+| F8 | **Physical Validation Protocol** — Measurement recording template, validation matrix tracker | F3, F6 | |
+| F9 | **Comprehensive Fixture** — Multi-operation board exercising full pipeline | F3, F4, F5, F7 | |
 
 ```mermaid
 graph TD
-    F1["F1: AI-Accessible Interface<br/>(window.__routr)"] --> F2["F2: Test Fixture Library"]
-    F1 --> F5["F5: In-App Measurement Tool<br/>(2D + 3D)"]
-    F1 --> F9["F9: MCP Server<br/>(routr-tools, separate pkg)"]
-    F2 --> F3["F3: G-code Integration Tests<br/>+ CI Pipeline"]
-    F2 --> F4["F4: Visual Regression Tests"]
-    F2 --> F6["F6: Cross-Layer<br/>Measurement Tests"]
-    F5 --> F6
-    F2 --> F7["F7: Physical Validation Protocol"]
-    F5 --> F7
-    F2 --> F8["F8: Comprehensive Fixture"]
-    F3 --> F8
-    F4 --> F8
+    F1["F1: AI-Accessible Interface<br/>(window.__routr)"] --> F2["F2: MCP Server<br/>(routr-tools, separate pkg)"]
+    F1 --> F3["F3: Test Fixture Library"]
+    F1 --> F6["F6: In-App Measurement Tool<br/>(2D + 3D)"]
+    F3 --> F4["F4: G-code Integration Tests<br/>+ CI Pipeline"]
+    F3 --> F5["F5: Visual Regression Tests"]
+    F3 --> F7["F7: Cross-Layer<br/>Measurement Tests"]
+    F6 --> F7
+    F3 --> F8["F8: Physical Validation Protocol"]
     F6 --> F8
-    F9 --> |"Enables protagonist/<br/>antagonist pattern"| F8
+    F3 --> F9["F9: Comprehensive Fixture"]
+    F4 --> F9
+    F5 --> F9
+    F7 --> F9
+    F2 --> |"Enables protagonist/<br/>antagonist pattern"| F9
 ```
 
 *Features are broken down into implementable stories during Step 1 (Story Breakdown). This table is the feature index.*
