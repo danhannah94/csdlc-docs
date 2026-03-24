@@ -27,6 +27,10 @@ Routr has solid unit test coverage across toolpath generators, coordinate transf
 - Physical validation cuts have been done ad hoc — no formal protocol, no documented results, no traceability from design dimensions to measured dimensions
 - There's no way for AI sub-agents to programmatically interact with the app for testing — all interaction requires UI automation through a human-designed interface
 
+**The deeper problem:**
+
+In an AI-driven development workflow, the AI writes the code — but how does the AI *prove to the human* that the code works? Unit tests are invisible to most humans. The validation pipeline is the mechanism by which the AI demonstrates correctness: "Here's the G-code output, here's what the design tab looks like, here's what the sim looks like, here are the dimensional measurements, and here's how all of these match." The human reviews *evidence*, not code. This shifts the human role from *writing* the proof to *reviewing* the proof — the AI-driven equivalent of test-driven development.
+
 **What triggered this work:**
 
 The coordinate flip bug class — the same category of bug appeared in edge treatments and table saw kerf lines. Both were caught during physical cuts, not by tests. The chamfer top/bottom flip between design and sim tabs proved that **G-code correctness alone isn't sufficient** — visual consistency across the app's layers matters too. With launch approaching, the question is: what else might be wrong that we haven't cut yet?
@@ -36,8 +40,9 @@ The coordinate flip bug class — the same category of bug appeared in edge trea
 - Define the complete validation pipeline from automated tests to physical verification
 - Establish integration tests driven by JSON test fixtures that validate G-code output, 2D canvas rendering, AND 3D simulator rendering
 - Create a formal physical validation protocol with documented results
-- Build an in-app measurement tool for fast dimensional comparison between design and physical cuts
+- Build an in-app measurement tool for fast dimensional comparison between design and physical cuts — available in both 2D design tab and 3D sim tab for cross-layer verification
 - Define AI-accessible hooks that let sub-agents programmatically drive and test the app
+- Build an MCP server that wraps the app's capabilities for AI-driven exploratory testing and future product features
 - Make "is this operation validated?" answerable for any feature at any time
 - Enable fast, confident iteration on the codebase without fear of silent regressions
 - Establish a testing strategy pattern that applies to all future epics/features
@@ -69,9 +74,9 @@ The coordinate flip bug class — the same category of bug appeared in edge trea
 | System / Layer | How It's Affected |
 |---------------|-------------------|
 | G-code Pipeline | Primary target — integration tests validate end-to-end G-code output |
-| Workshop Mode (2D Canvas) | Visual regression screenshots validate design tab rendering |
-| Simulator (3D Canvas) | Visual regression screenshots validate 3D sim rendering |
-| Coordinate Systems | Cross-layer visual tests catch coordinate transform inconsistencies |
+| Workshop Mode (2D Canvas) | Visual regression screenshots validate design tab rendering; measurement tool overlay |
+| Simulator (3D Canvas) | Visual regression screenshots validate 3D sim rendering; measurement tool overlay |
+| Coordinate Systems | Cross-layer visual tests AND cross-layer measurement catch coordinate transform inconsistencies |
 | Edge Treatments | Specific validation needed for each treatment type × edge combination |
 | SVG Import | Engrave and pocket toolpaths need integration test coverage |
 | Zustand Store | AI-accessible hooks need programmatic store access |
@@ -107,9 +112,11 @@ graph TD
         HOOKS --> GCODE["G-code Output<br/>→ assert matches expected .nc"]
         HOOKS --> CANVAS2D["2D Design Tab Screenshot<br/>→ pixel-diff against golden .png"]
         HOOKS --> SIM3D["3D Sim Tab Screenshot<br/>→ pixel-diff against golden .png"]
-        GCODE --> CROSS["Cross-layer consistency<br/>All three agree?"]
+        HOOKS --> MEASURE_CROSS["Cross-layer measurement<br/>Design tab dims = Sim tab dims?"]
+        GCODE --> CROSS["Cross-layer consistency<br/>All outputs agree?"]
         CANVAS2D --> CROSS
         SIM3D --> CROSS
+        MEASURE_CROSS --> CROSS
     end
 
     subgraph L3["Layer 3: E2E Tests (NEW)"]
@@ -134,8 +141,52 @@ Each layer catches different categories of bugs:
 | Layer | What It Catches | Cost | Frequency |
 |-------|----------------|------|-----------|
 | **Unit tests** | Math errors, logic bugs, type mismatches | Free (seconds) | Every code change |
-| **Functional/Integration** | G-code pipeline regressions, coordinate bugs, visual rendering inconsistencies between 2D design/3D sim/G-code | Free (seconds–minutes) | Every code change |
+| **Functional/Integration** | G-code pipeline regressions, coordinate bugs, visual rendering inconsistencies between 2D design/3D sim/G-code, cross-layer dimensional mismatches | Free (seconds–minutes) | Every code change |
 | **E2E** | Real-world factors: tool deflection, material variance, machine quirks, dimensional accuracy, simulator visual trust | High (material + time) | New operation types, coordinate changes, pre-launch |
+
+---
+
+### Quality Gates
+
+Quality gates define WHERE in the CSDLC pipeline each check lives. This maps the testing layers to the development process:
+
+```mermaid
+graph LR
+    subgraph DEV["Development (Step 3)"]
+        UNIT_G["🚦 Gate 1: Unit Tests<br/>Must pass before PR"]
+        INT_G["🚦 Gate 2: Integration Tests<br/>G-code assertions must match"]
+    end
+
+    subgraph CI["CI / PR (Automated)"]
+        CI_G["🚦 Gate 3: GitHub Actions<br/>Unit + G-code integration<br/>BLOCKS merge"]
+    end
+
+    subgraph REVIEW["Review (Steps 4-6)"]
+        VIS_G["🚦 Gate 4: Visual Regression<br/>AI Lead reviews screenshot diffs"]
+        LEAD_G["🚦 Gate 5: AI Lead Review<br/>Output matches ticket scope"]
+        HUMAN_G["🚦 Gate 6: Human Review<br/>Intent met, feels right"]
+    end
+
+    subgraph LAUNCH["Pre-Launch"]
+        E2E_G["🚦 Gate 7: Physical Validation<br/>Dimensional accuracy on CNC"]
+    end
+
+    DEV --> CI --> REVIEW --> LAUNCH
+```
+
+| Gate | Type | Where in Pipeline | Who | Blocks? |
+|------|------|------------------|-----|---------|
+| **Gate 1: Unit Tests** | Automated | Step 3 (sub-agent execution) | Sub-agent runs before submitting | Yes — PR not created if tests fail |
+| **Gate 2: Integration Tests** | Automated | Step 3 (sub-agent execution) | Sub-agent verifies G-code assertions | Yes — PR not created if assertions fail |
+| **Gate 3: CI Check** | Automated | PR creation | GitHub Actions | **Yes — required status check, blocks merge** |
+| **Gate 4: Visual Regression** | Semi-automated | Step 4 (AI Lead review) | AI Lead reviews Playwright screenshot diffs | Yes — AI Lead must approve visual changes |
+| **Gate 5: AI Lead Review** | Manual (AI) | Step 4 | AI Lead verifies scope, quality, no regressions | Yes — work doesn't reach human until AI Lead approves |
+| **Gate 6: Human Review** | Manual (Human) | Step 6 | Dan reviews intent, UX, "feels right" | Yes — final approval before merge/ship |
+| **Gate 7: Physical Validation** | Manual (Human) | Pre-launch / new op types | Dan cuts on CNC, measures with calipers | Yes — new operation types must pass before launch |
+
+**The key insight:** Gates 1-3 are cheap and automated — they run on every change. Gates 4-5 are AI-assisted — the AI Lead surfaces evidence for review. Gate 6 is human judgment — the irreplaceable "does this feel right?" check. Gate 7 is physical — rare but critical for real-world trust.
+
+---
 
 ### CI/CD Strategy
 
@@ -150,7 +201,7 @@ Each layer catches different categories of bugs:
 
 The sub-agent development workflow makes traditional CI/CD less critical for the *development* loop — the AI Lead reviews and tests before PRs are created. But CI adds a safety net *between* sessions: a PR that sneaks in a coordinate bug gets caught on push, even if no one ran the tests manually. CI is the overnight security guard; sub-agents are the daytime crew.
 
-> 🟡 **OPEN QUESTION:** Do we want CI to block PR merges (required status check) or just report (advisory)? Blocking is safer but can slow down Lightning Strikes if CI is slow.
+GitHub Actions CI will be configured as a **required status check** — PRs cannot merge until unit tests and G-code integration tests pass. This is a quality gate, same as any other in the pipeline.
 
 ---
 
@@ -158,9 +209,11 @@ The sub-agent development workflow makes traditional CI/CD less critical for the
 
 Since this app is designed and written by AI, it makes sense to build first-class interfaces for AI to drive and test it. This isn't just about testing — it's about making the app AI-native. The hooks built here for validation become the foundation for future AI features like PDF-to-G-code.
 
+**This may be a core architectural pattern for AI-designed apps.** Every modern app has a UI layer (for humans), an API layer (for services), and a data layer (for persistence). AI-designed apps need an **AI layer** — a structured interface purpose-built for LLMs to understand, drive, and extend the app. Not a REST API (too low-level, no semantic context). Not the UI (too fragile, designed for humans). An MCP-style interface that gives AI agents the same fluency with the app that a senior developer has. This pattern should be considered for every CSDLC project going forward.
+
 **Dev-mode API (`window.__routr`):**
 
-Exposed only in development/test builds. Gives programmatic access to everything a sub-agent needs:
+Exposed in development/test builds, and on staging behind a feature flag for AI feature experimentation. NOT in production until a product feature requires it.
 
 ```typescript
 // Proposed dev-mode API surface
@@ -173,7 +226,7 @@ window.__routr = {
   generateGcode(): string,                        // Trigger pipeline, return G-code string
   generateToolpaths(): ToolpathOperation[],        // Get intermediate toolpath data
 
-  // Measurement
+  // Measurement (same engine used by in-app measurement tool)
   measureDistance(pointA: Point, pointB: Point): number,  // Distance between two points (mm)
   measureFromEdge(shapeId: string, edge: 'top' | 'bottom' | 'left' | 'right'): number,
 
@@ -195,13 +248,13 @@ window.__routr = {
 - **Reliability**: No flaky CSS selectors, no waiting for animations, no "button didn't render yet"
 - **Speed**: Direct function calls are orders of magnitude faster than Playwright UI automation
 - **Future features**: PDF-to-G-code AI reads a plan, calls `addBoard()` + `addShape()` to build the design programmatically
-- **Validation**: `measureDistance()` and `measureFromEdge()` make dimensional verification instant
+- **Validation**: `measureDistance()` and `measureFromEdge()` make dimensional verification instant — in both 2D and 3D contexts
 
-> 🟡 **OPEN QUESTION:** Should this API be available in production behind a feature flag (for future AI features)? Or strictly dev/test only for now?
-
-#### MCP Server: AI-Native Tool Interface
+#### MCP Server: AI-Native Tool Interface (Separate Package)
 
 The `window.__routr` API gives programmatic access from within the browser. But to let AI agents **reason about and drive the app from outside** — connecting from Claude, OpenClaw sub-agents, or any MCP-compatible client — we wrap the same capabilities in an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server.
+
+The MCP server lives as a **separate package** in the repo (`packages/routr-mcp` or similar) with its own versioning. This keeps concerns clean — the app doesn't depend on MCP, and MCP can evolve independently. It also positions the MCP server for distribution beyond just testing (future product features, marketplace integrations).
 
 **What MCP adds over a raw API:**
 
@@ -226,7 +279,7 @@ MCP Server: routr-tools
 └── validate_gcode        — Compare generated G-code against an expected file
 ```
 
-**This unlocks AI-driven exploratory testing:**
+#### AI-Driven Exploratory Testing & the Protagonist/Antagonist Pattern
 
 Scripted integration tests (fixtures + assertions) catch regressions. But an AI agent connected via MCP can do something far more powerful — **creative, exploratory testing:**
 
@@ -237,6 +290,23 @@ Scripted integration tests (fixtures + assertions) catch regressions. But an AI 
 
 The AI understands woodworking concepts, understands the app's capabilities, and can creatively find edge cases that no human would think to write a fixture for. This is a fundamentally different testing paradigm — not "did it change?" (regression) but "is it correct?" (verification).
 
+**Protagonist/Antagonist Agent Pattern:**
+
+This maps naturally to the CSDLC pipeline:
+
+```mermaid
+graph LR
+    PROTAGONIST["🟢 Protagonist Agent<br/>(Step 3: Implementation)<br/>Writes the code,<br/>creates the PR"] --> ANTAGONIST["🔴 Antagonist Agent<br/>(Step 4-5: Review + QA)<br/>Connects via MCP,<br/>tries to break it"]
+    ANTAGONIST --> |"Finds issues"| PROTAGONIST
+    ANTAGONIST --> |"No issues found"| HUMAN["👤 Human Review<br/>(Step 6)"]
+```
+
+- The **protagonist** is the sub-agent executing the ticket (Step 3). It writes code, runs scripted tests, creates the PR.
+- The **antagonist** is a separate AI agent that reviews the protagonist's work (Steps 4-5). It connects via MCP, loads the affected fixtures, runs exploratory tests, tries creative edge cases, and reports findings.
+- The **human** reviews the evidence from both agents (Step 6) and makes the final call.
+
+This adversarial pattern drives quality because the antagonist has different incentives than the protagonist — its job is to find problems, not ship features. It's the AI equivalent of a dedicated QA engineer who didn't write the code.
+
 **The product vision connection:**
 
 The MCP server built for testing IS the integration layer for Routr's AI product features:
@@ -244,6 +314,7 @@ The MCP server built for testing IS the integration layer for Routr's AI product
 | Use Case | How MCP Enables It |
 |----------|-------------------|
 | **AI-driven testing** | Sub-agents connect via MCP, design test scenarios, execute, report findings |
+| **Protagonist/Antagonist QA** | Antagonist agent connects via MCP to challenge protagonist's work |
 | **PDF-to-G-code** | AI reads a woodworking plan PDF, connects to Routr via MCP, calls `create_board` + `add_shape` to build the design, exports G-code |
 | **AI Design Assistant** | "I want a cutting board with a juice groove" → AI agent uses MCP tools to design it in Routr |
 | **Plan Marketplace ingestion** | Automated pipeline that takes uploaded plans and converts them to Routr projects |
@@ -253,12 +324,13 @@ The MCP server built for testing IS the integration layer for Routr's AI product
 ```mermaid
 graph TD
     subgraph CLIENTS["MCP Clients"]
+        PROTAGONIST["🟢 Protagonist Agent"]
+        ANTAGONIST["🔴 Antagonist Agent"]
         CLAUDE["Claude / AI Agents"]
         OPENCLAW["OpenClaw Sub-agents"]
-        TESTING["Test Automation"]
     end
 
-    subgraph MCP["MCP Server (routr-tools)"]
+    subgraph MCP["MCP Server: routr-tools<br/>(separate package)"]
         TOOLS["Tool definitions<br/>+ descriptions + schemas"]
     end
 
@@ -267,6 +339,7 @@ graph TD
         STORE["Zustand Store"]
         ENGINE["Engine Pipeline"]
         CANVAS["Canvas Renderers"]
+        MEASURE["Measurement Engine"]
     end
 
     CLIENTS --> |"MCP protocol"| MCP
@@ -274,6 +347,7 @@ graph TD
     API --> STORE
     API --> ENGINE
     API --> CANVAS
+    API --> MEASURE
 ```
 
 The MCP server connects to the running Routr app (via Playwright for browser-based interaction, or directly to the engine for headless G-code generation). This means we can run both:
@@ -281,25 +355,80 @@ The MCP server connects to the running Routr app (via Playwright for browser-bas
 - **Headed mode**: MCP drives the actual app UI (for visual testing)
 - **Headless mode**: MCP calls engine functions directly (for fast G-code testing)
 
-> 🟡 **OPEN QUESTION:** Should the MCP server be a separate package in the repo, or part of the app's dev tooling? Separate package is cleaner for distribution but adds maintenance overhead.
-
 ---
 
 ### Layer 2: Functional / Integration Tests (Detail)
 
-This is the core of the epic. Integration tests tie together three outputs from a single input:
+This is the core of the epic. Integration tests tie together multiple outputs from a single input.
+
+#### Integration Test Architecture
 
 ```mermaid
-graph LR
-    FIXTURE["JSON Test Fixture<br/>📄 fixture.json"] --> HOOKS["window.__routr<br/>loadFixture()"]
+graph TD
+    subgraph INPUT["Test Input"]
+        FIXTURE["JSON Test Fixture<br/>📄 fixture.json"]
+    end
 
-    HOOKS --> GCODE["G-code Output<br/>📄 expected.nc"]
-    HOOKS --> DESIGN["2D Design Tab<br/>📸 design.png"]
-    HOOKS --> SIMTAB["3D Sim Tab<br/>📸 sim.png"]
+    subgraph LOAD["Loading"]
+        HOOKS["window.__routr.loadFixture()<br/>or MCP load_fixture"]
+    end
 
-    GCODE --> ASSERT["Assertions"]
-    DESIGN --> ASSERT
-    SIMTAB --> ASSERT
+    subgraph OUTPUTS["Test Outputs (all from same fixture)"]
+        GCODE["G-code Output<br/>📄 expected.nc"]
+        DESIGN["2D Design Tab<br/>📸 design.png"]
+        SIMTAB["3D Sim Tab<br/>📸 sim.png"]
+        MEASURE_2D["2D Measurements<br/>shape-to-edge distances"]
+        MEASURE_3D["3D Measurements<br/>toolpath-to-edge distances"]
+    end
+
+    subgraph ASSERTIONS["Assertions"]
+        A1["G-code matches expected file"]
+        A2["2D screenshot matches golden image"]
+        A3["3D screenshot matches golden image"]
+        A4["2D measurements = 3D measurements<br/>(cross-layer consistency)"]
+    end
+
+    FIXTURE --> HOOKS
+    HOOKS --> GCODE --> A1
+    HOOKS --> DESIGN --> A2
+    HOOKS --> SIMTAB --> A3
+    HOOKS --> MEASURE_2D --> A4
+    HOOKS --> MEASURE_3D --> A4
+```
+
+**How the test runner works:**
+
+1. **Load** — Read fixture JSON, call `loadFixture()` to hydrate Zustand store
+2. **Generate** — Call `generateGcode()`, capture the output string
+3. **Capture** — Trigger Playwright screenshots of design tab and sim tab at locked viewport/camera/theme
+4. **Measure** — Call `measureFromEdge()` for key shapes in both 2D design context and 3D sim context
+5. **Assert** — Compare all outputs against stored baselines:
+    - G-code: character-by-character diff against `.expected.nc`
+    - Screenshots: pixel-diff with tolerance threshold against golden `.png` files
+    - Measurements: 2D design dimensions must equal 3D sim dimensions (cross-layer consistency)
+6. **Report** — On failure, output the diffs for human review
+
+**Baseline management:**
+
+- First run with a new fixture: `npm run test:integration -- --update` saves current outputs as baselines
+- Subsequent runs compare against baselines
+- When a baseline changes intentionally: review the diff, run `--update` to accept
+- **Fixture updates require human review** — the diff must be inspected, not rubber-stamped
+
+**Test commands:**
+
+```bash
+# Run G-code integration tests only (fast, CI-friendly)
+npm run test:integration:gcode
+
+# Run visual regression tests (requires browser, slower)
+npm run test:integration:visual
+
+# Run all integration tests
+npm run test:integration
+
+# Update baselines after intentional changes
+npm run test:integration -- --update
 ```
 
 #### The JSON Test Fixture
@@ -344,15 +473,15 @@ A fixture file fully describes a project state — everything needed to reproduc
 - Specify **ALL settings explicitly** — never rely on defaults (defaults change, fixtures shouldn't)
 - A **comprehensive fixture** combines multiple operations to test ordering and tool changes
 
-#### Three Assertion Types
+#### Three Assertion Types + Cross-Layer Measurement
 
-**1. G-code assertion** — Load fixture via `window.__routr.loadFixture()`, call `generateGcode()`, compare against stored `.expected.nc` file. Character-by-character match. If it differs → developer reviews diff → update expected file (intentional) or fix regression.
+**1. G-code assertion** — Load fixture via `loadFixture()`, call `generateGcode()`, compare against stored `.expected.nc` file. Character-by-character match. If it differs → developer reviews diff → update expected file (intentional) or fix regression.
 
-**2. 2D canvas screenshot** — Load fixture, capture design tab canvas via `captureDesignCanvas()` or Playwright screenshot. Compare against golden `.design.png` using pixel-diff with tolerance threshold (absorbs anti-aliasing differences). Catches: shapes in wrong positions, cuts on wrong side, visual artifacts.
+**2. 2D canvas screenshot** — Load fixture, capture design tab canvas via Playwright at locked viewport + theme. Compare against golden `.design.png` using pixel-diff with tolerance threshold (absorbs anti-aliasing). Catches: shapes in wrong positions, cuts on wrong side, visual artifacts.
 
 **3. 3D sim screenshot** — Load fixture, generate toolpaths, capture sim tab at a **fixed camera angle**. Compare against golden `.sim.png`. Catches the chamfer-on-wrong-edge class of bugs — where design tab shows one thing and sim shows another.
 
-**Cross-layer consistency is the killer feature.** The chamfer flip bug would have been caught: 2D screenshot shows chamfer on top, 3D screenshot shows it on bottom → test surfaces the discrepancy immediately.
+**4. Cross-layer measurement** — Use the measurement API to check the same dimensions in both the 2D design tab and 3D sim tab. "This pocket is 47mm from the left edge" should be true in BOTH contexts. If the numbers disagree, we've found a coordinate bug. This is the most precise way to catch the kerf line flip class of bugs — not just "does it look right?" but "do the numbers match?"
 
 #### Standard Camera Angles for 3D Sim Screenshots
 
@@ -434,14 +563,13 @@ Before cutting anything, the human reviews the simulator render: "Does this look
 **For each validation cut:**
 
 1. **Design** — Load test fixture in Routr (or create the design matching the fixture)
-2. **In-app measurement** — Use the measurement tool to record expected dimensions (e.g., "hole center is 47.5mm from left edge, 32mm from top edge")
+2. **In-app measurement** — Use the measurement tool in the design tab to record expected dimensions (e.g., "hole center is 47.5mm from left edge, 32mm from top edge"). Verify the same measurements in the sim tab.
 3. **Eyeball sim** — Check sim tab — does it look right?
 4. **Export** — Generate G-code
 5. **Setup** — Load G-code on CNC, set origin, verify material dimensions with calipers
 6. **Cut** — Run the program
 7. **Measure** — Use calipers to measure the same dimensions recorded in step 2
-8. **Record** — Document: expected → actual → delta → pass/fail
-9. **Photo** — Take a photo of the cut piece for the record
+8. **Record** — Document: expected → actual → delta → pass/fail with comments
 
 **Tolerance target: ±0.5mm (±0.020")**
 
@@ -466,6 +594,8 @@ Starting point. Tighter than most hobby CNC work but achievable with proper setu
 
 #### Validation Record Template
 
+Physical validation is pass/fail with comments. Photos are optional — useful for documentation but not required.
+
 ```markdown
 ## [Fixture Name] — Physical Validation Record
 
@@ -482,42 +612,47 @@ Starting point. Tighter than most hobby CNC work but achievable with proper setu
 | Cut position from left edge | 100.0mm | 99.8mm | -0.2mm | ✅ |
 | Cut depth | 19.0mm | 18.7mm | -0.3mm | ✅ |
 
-### Sim Eyeball Check
+### Checks
 - [ ] Sim visual matches design tab
 - [ ] Cut positions look correct
 - [ ] Edge treatments on correct edges
-
-### Photos
-- [ ] Full piece photo
-- [ ] Detail photos of measured dimensions
+- [ ] Cross-layer measurements match (design tab = sim tab)
 
 ### Result: ✅ PASS / ❌ FAIL
-**Notes:** [observations, anomalies, lessons]
+**Comments:** [observations, anomalies, lessons, anything worth noting]
 ```
 
 ---
 
 ### In-App Measurement Tool
 
-**Purpose:** Surface the dimensional data the app already knows internally in a way that's useful for physical validation (and for users generally).
+**Purpose:** Surface the dimensional data the app already knows internally in a way that's useful for both validation and everyday use. Available in **both the 2D design tab and the 3D sim tab** for cross-layer verification.
 
 **How it works:**
 
-The app already stores exact positions, dimensions, and relationships between shapes. The measurement tool exposes this data:
+The app already stores exact positions, dimensions, and relationships between shapes and toolpaths. The measurement tool exposes this data:
 
 - **Point-to-point distance** — Click two points on the canvas, see the distance in current units
 - **Shape-to-edge distance** — Select a shape, see its distance from each board edge
 - **Shape dimensions** — Select a shape, see its width, height, depth, position
+- **Toolpath-to-edge distance** (sim tab) — Same measurements but against generated toolpaths
 
-**For validation:** Before cutting, use the measurement tool to record expected dimensions. After cutting, measure the same dimensions with calipers. Compare.
+**Cross-layer validation use case:**
 
-**For users:** "How far is this pocket from the edge?" is a question users ask constantly. This tool answers it without mental math.
+The measurement tool in the design tab shows "this pocket is 47mm from the left edge." The measurement tool in the sim tab should show the toolpath for that pocket starts 47mm from the left edge. If they disagree, we've found a coordinate bug. This is how we'd catch the kerf line flip — the design tab says the kerf line is at X=100, the sim tab says the toolpath is at X=100... but wait, the G-code says X=0 (board width minus 100 after flipY). The measurement tool makes the discrepancy visible without needing to read G-code.
+
+**UX approach:**
+
+Top toolbar "Measure" mode — similar to Fusion 360's approach. A tools dropdown in the top bar that activates measurement mode. When active:
+
+- Clicking on the canvas shows dimension overlays
+- Works in both 2D design tab (measures against shapes/board) and 3D sim tab (measures against toolpaths/board)
+- Same visual language in both contexts for consistency
+- Deactivate by clicking the mode again or pressing Escape
 
 **Implementation approach:**
 
-This integrates with the AI-accessible interface — `measureDistance()` and `measureFromEdge()` in the `window.__routr` API serve both the in-app UI tool and automated testing.
-
-> 🟡 **OPEN QUESTION:** Should the measurement tool live in the design tab as an overlay/mode? Or as a panel? Dan's UX instinct needed here.
+The measurement engine is shared between the UI tool and the `window.__routr` API. `measureDistance()` and `measureFromEdge()` serve both the in-app overlay and automated testing. This means integration tests can assert measurements programmatically — the same data the human sees in the overlay.
 
 ---
 
@@ -529,10 +664,13 @@ When a new epic or feature is built, it enters the validation pipeline through a
 graph TD
     NEW["New Feature / Epic"] --> FIXTURE["Create test fixture(s)<br/>covering the feature"]
     FIXTURE --> UNIT["Write unit tests<br/>for new engine functions"]
-    FIXTURE --> INTEGRATION["Establish integration baselines<br/>G-code + 2D + 3D screenshots"]
+    FIXTURE --> INTEGRATION["Establish integration baselines<br/>G-code + 2D + 3D screenshots<br/>+ cross-layer measurements"]
     UNIT --> REVIEW["AI Lead reviews<br/>all baselines"]
     INTEGRATION --> REVIEW
-    REVIEW --> PHYSICAL{"New operation type?"}
+    REVIEW --> ANTAGONIST{"Run antagonist<br/>agent? (optional)"}
+    ANTAGONIST --> |Yes| EXPLORE["🔴 Antagonist explores<br/>via MCP, tries to break it"]
+    ANTAGONIST --> |No| PHYSICAL
+    EXPLORE --> PHYSICAL{"New operation type?"}
     PHYSICAL --> |Yes| CUT["Physical validation cut<br/>following E2E protocol"]
     PHYSICAL --> |No| DONE["✅ Feature validated"]
     CUT --> DONE
@@ -543,10 +681,63 @@ graph TD
 1. **Every new feature must have at least one fixture.** No exceptions. The fixture is created during story breakdown (Step 1).
 2. **G-code baselines are mandatory.** If the feature affects G-code output, integration test baselines must be established before the PR is merged.
 3. **Visual baselines are mandatory for UI-affecting changes.** If it changes what the design tab or sim tab renders, screenshot baselines must be established.
-4. **Physical validation is required only for new operation types.** New cut type, new edge treatment, new toolpath algorithm → needs a real cut. Bug fixes and UI changes do not.
-5. **Fixture updates require human review.** When a fixture baseline changes, the diff must be reviewed by the human before accepting. No rubber-stamping.
+4. **Cross-layer measurement assertions are mandatory for spatial features.** If the feature places or moves things on the canvas, measurement assertions must verify consistency between design and sim tabs.
+5. **Physical validation is required only for new operation types.** New cut type, new edge treatment, new toolpath algorithm → needs a real cut. Bug fixes and UI changes do not.
+6. **Fixture updates require human review.** When a fixture baseline changes, the diff must be reviewed by the human before accepting. No rubber-stamping.
+7. **Antagonist testing is encouraged for complex features.** Connect an antagonist agent via MCP to exploratory-test the new feature. Not mandatory for every PR, but strongly recommended for new operation types and coordinate-affecting changes.
 
-> 📝 **PROCESS NOTE:** This testing strategy should be extracted into the epic design doc template after this epic is finalized. Every future epic should include a "Testing Strategy" section that references these rules.
+> 📝 **PROCESS NOTE:** This testing strategy should be extracted into the epic design doc template after this epic is finalized. Every future epic should include a "Testing Strategy" section that references these rules and specifies which fixtures will be created.
+
+---
+
+### Integration Test Strategy
+
+How integration tests are structured and maintained as the codebase grows:
+
+**Test organization:**
+
+```
+cncmill-app/
+├── src/
+│   ├── __fixtures__/              # JSON fixtures + golden files
+│   └── __tests__/
+│       ├── integration/
+│       │   ├── gcode.test.ts      # G-code assertion tests (all fixtures)
+│       │   ├── visual.test.ts     # Screenshot comparison tests (all fixtures)
+│       │   └── measurement.test.ts # Cross-layer measurement tests
+│       └── ...                    # Existing unit tests
+├── playwright.config.ts           # Visual test configuration
+└── package.json                   # Test scripts
+```
+
+**Writing a new integration test:**
+
+1. Create a fixture directory under `__fixtures__/` with `fixture.json`
+2. Run `npm run test:integration -- --update` to generate initial baselines
+3. **Review the baselines manually** — do the G-code, screenshots, and measurements look correct?
+4. Commit the fixture + baselines together
+5. From this point forward, any change that affects this fixture's output will cause a test failure
+
+**When tests fail:**
+
+```mermaid
+graph TD
+    FAIL["❌ Integration test fails"] --> REVIEW["Review the diff"]
+    REVIEW --> INTENTIONAL{"Intentional change?"}
+    INTENTIONAL --> |Yes| INSPECT["Inspect: does new output<br/>look correct?"]
+    INSPECT --> |Yes| UPDATE["npm run test:integration -- --update<br/>Commit updated baselines"]
+    INSPECT --> |No| BUG["Bug in the change — fix it"]
+    INTENTIONAL --> |No| REGRESSION["Regression — investigate<br/>and fix before merging"]
+```
+
+**Avoiding flaky visual tests:**
+
+- Lock viewport size: `1280×720` for all Playwright screenshots
+- Lock theme: light mode
+- Lock camera angles: standard angles defined in fixture or test config
+- Pixel-diff tolerance: allow ~1-2% pixel difference for anti-aliasing
+- Run on consistent environment (same browser version)
+- If a test is persistently flaky, increase tolerance or switch to structural assertion
 
 ---
 
@@ -563,7 +754,9 @@ graph TD
 | Canvas/viewport resize | Design screenshots fail | Viewport size locked in test harness |
 | Coordinate system changes | ALL assertions break (expected) | This is the point — forced review of all outputs after coordinate changes |
 | Theme changes (dark/light) | Screenshots differ | Lock theme in test harness (light mode for consistency) |
-| `window.__routr` available in prod | Security/bundle size concern | Gate behind `import.meta.env.DEV` or feature flag |
+| `window.__routr` available in prod | Security/bundle size concern | Dev/test default; staging with feature flag; prod only when product feature requires it |
+| Measurement disagrees between 2D and 3D | Coordinate bug | This is exactly what cross-layer measurement tests are designed to catch |
+| Antagonist agent finds a real bug | Protagonist must fix before merge | Great outcome — the pattern is working |
 
 ---
 
@@ -575,9 +768,11 @@ graph TD
 | Integration tests create false confidence | Medium | High | Tests catch *regressions*. Initial baselines must be validated by physical cuts + human review. |
 | Fixture maintenance burden as features grow | Medium | Medium | One concern per fixture. Comprehensive fixture catches interaction bugs. |
 | Physical validation bottleneck (Dan = only CNC) | High | High | Minimize physical cuts. Integration tests handle regressions. Physical only for new ops. |
-| Playwright screenshot tests are slow | Medium | Low | Run visual tests separately from unit/G-code tests. |
+| Playwright screenshot tests are slow | Medium | Low | Run visual tests separately from unit/G-code tests. Split test commands. |
 | AI-accessible interface scope creep | Medium | Medium | Start with minimum viable API surface. Expand as needs emerge. |
+| MCP server maintenance overhead | Medium | Low | Separate package keeps it isolated. Thin wrapper over `window.__routr`. |
 | Kerf line flip contaminates table saw baselines | High | Medium | Fix bug BEFORE establishing table saw fixture baseline. |
+| Antagonist agent is too aggressive (false positives) | Medium | Low | Human reviews antagonist findings before acting. Findings are suggestions, not blockers. |
 
 ---
 
@@ -589,26 +784,30 @@ Features extracted from this epic. Each becomes a set of implementable stories d
 |---------|---------|-------------|--------|
 | F1 | **AI-Accessible Interface** — `window.__routr` dev-mode API: fixture loading, G-code generation, canvas capture, measurement | None | |
 | F2 | **Test Fixture Library** — JSON fixture format, TypeScript types, initial set of fixtures | F1 | |
-| F3 | **G-code Integration Tests** — Load fixture → generate G-code → assert matches `.expected.nc` | F1, F2 | |
+| F3 | **G-code Integration Tests** — Load fixture → generate G-code → assert matches `.expected.nc` + CI pipeline | F1, F2 | |
 | F4 | **Visual Regression Tests** — Playwright harness for 2D + 3D screenshot capture, pixel-diff against golden images, fixed camera angles | F1, F2 | |
-| F5 | **In-App Measurement Tool** — Point-to-point and shape-to-edge distance display, both UI and API | F1 | |
-| F6 | **Physical Validation Protocol** — Measurement recording template, validation matrix tracker, photo archive | F2, F5 | |
-| F7 | **Comprehensive Fixture** — Multi-operation board exercising full pipeline | F2, F3, F4 | |
-| F8 | **MCP Server (routr-tools)** — Model Context Protocol wrapper for AI-driven exploratory testing and future product features | F1 | |
+| F5 | **In-App Measurement Tool** — Point-to-point and shape-to-edge measurement in both 2D design tab and 3D sim tab, top toolbar "Measure" mode | F1 | |
+| F6 | **Cross-Layer Measurement Tests** — Automated assertions that 2D design dimensions match 3D sim dimensions | F1, F2, F5 | |
+| F7 | **Physical Validation Protocol** — Measurement recording template, validation matrix tracker | F2, F5 | |
+| F8 | **Comprehensive Fixture** — Multi-operation board exercising full pipeline | F2, F3, F4, F6 | |
+| F9 | **MCP Server (routr-tools)** — Separate package, Model Context Protocol wrapper for AI-driven testing and future product features | F1 | |
 
 ```mermaid
 graph TD
     F1["F1: AI-Accessible Interface<br/>(window.__routr)"] --> F2["F2: Test Fixture Library"]
-    F1 --> F5["F5: In-App Measurement Tool"]
-    F1 --> F8["F8: MCP Server<br/>(routr-tools)"]
-    F2 --> F3["F3: G-code Integration Tests"]
+    F1 --> F5["F5: In-App Measurement Tool<br/>(2D + 3D)"]
+    F1 --> F9["F9: MCP Server<br/>(routr-tools, separate pkg)"]
+    F2 --> F3["F3: G-code Integration Tests<br/>+ CI Pipeline"]
     F2 --> F4["F4: Visual Regression Tests"]
-    F2 --> F6["F6: Physical Validation Protocol"]
+    F2 --> F6["F6: Cross-Layer<br/>Measurement Tests"]
     F5 --> F6
-    F2 --> F7["F7: Comprehensive Fixture"]
-    F3 --> F7
-    F4 --> F7
-    F8 --> |"Enables AI-driven<br/>exploratory testing"| F7
+    F2 --> F7["F7: Physical Validation Protocol"]
+    F5 --> F7
+    F2 --> F8["F8: Comprehensive Fixture"]
+    F3 --> F8
+    F4 --> F8
+    F6 --> F8
+    F9 --> |"Enables protagonist/<br/>antagonist pattern"| F8
 ```
 
 *Features are broken down into implementable stories during Step 1 (Story Breakdown). This table is the feature index.*
@@ -626,11 +825,19 @@ graph TD
 | 2026-03-23 | Visual regression via Playwright screenshots | Catches cross-layer inconsistencies (design vs sim) that G-code tests miss | No visual testing (rejected — chamfer flip proved this is necessary) |
 | 2026-03-23 | Simulator validation = human eyeball | Automated photo comparison too complex; eyeball is faster and sufficient | Pixel comparison with physical photos (rejected — brittle) |
 | 2026-03-23 | ±0.5mm starting tolerance | Conservative; will adjust after first measurements | — |
-| 2026-03-23 | Include measurement tool in this epic | Dual purpose (validation + user feature); enables E2E protocol | Separate epic (rejected — too tightly coupled to validation) |
+| 2026-03-23 | Include measurement tool in this epic | Dual purpose (validation + user feature); enables E2E protocol and cross-layer verification | Separate epic (rejected — too tightly coupled to validation) |
 | 2026-03-23 | Three-layer testing model (unit → integration → E2E) | Cleaner than four layers; sim eyeball is part of E2E, not its own layer | Four layers (rejected — over-granular) |
-| 2026-03-23 | Build AI-accessible interface (window.__routr) | App is built by AI — should be testable by AI. Hooks enable testing AND future AI features (PDF-to-G-code). | Playwright-only UI automation (rejected — fragile, slow, fights against the grain) |
-| 2026-03-23 | Hybrid CI/CD: GitHub Actions for deterministic tests, local for visual/AI-driven | CI catches regressions between sessions without token cost; sub-agents handle dev-loop testing | All-CI (rejected — visual tests too flaky initially) or all-local (rejected — misses between-session regressions) |
-| 2026-03-23 | MCP server wrapping `window.__routr` for AI-driven testing | MCP gives LLMs structured tool access with context — enables exploratory testing AND future product features (PDF-to-G-code, AI Design Assistant). The testing infrastructure IS the product integration layer. | Raw API only (rejected — misses the LLM context layer), no MCP (rejected — leaves AI testing as brittle Playwright scripting) |
+| 2026-03-23 | Build AI-accessible interface (window.__routr) | App is built by AI — should be testable by AI. Hooks enable testing AND future AI features (PDF-to-G-code). Core architectural pattern for AI-designed apps. | Playwright-only UI automation (rejected — fragile, slow, fights against the grain) |
+| 2026-03-23 | Hybrid CI/CD: GitHub Actions for deterministic tests, local for visual/AI-driven | CI catches regressions between sessions without token cost; sub-agents handle dev-loop testing | All-CI or all-local (both rejected — see CI/CD section) |
+| 2026-03-23 | CI blocks PR merges (required status check) | Quality gate — same principle as all other gates in the pipeline | Advisory only (rejected — too easy to ignore) |
+| 2026-03-23 | MCP server as separate package | Clean separation of concerns; independent versioning; positions for distribution beyond testing | Part of app (rejected — couples testing infra to app) |
+| 2026-03-23 | MCP server wrapping `window.__routr` for AI-driven testing | MCP gives LLMs structured tool access with context — enables exploratory testing AND future product features. Testing infrastructure IS the product integration layer. | Raw API only (rejected — misses LLM context layer) |
+| 2026-03-23 | Protagonist/antagonist agent pattern for QA | Adversarial testing drives quality — antagonist has different incentives than protagonist | Single agent does both (rejected — conflicting goals) |
+| 2026-03-24 | Measurement tool in both 2D design tab and 3D sim tab | Cross-layer measurement catches coordinate bugs (like kerf line flip) with numbers, not just visuals | Design tab only (rejected — misses the cross-layer verification value) |
+| 2026-03-24 | Measurement tool UX: top toolbar "Measure" mode (Fusion 360 style) | Consistent across 2D/3D contexts; established UX pattern from industry-standard CAD tools | Panel-based (rejected — panels are tab-specific; toolbar is global) |
+| 2026-03-24 | `window.__routr` on staging behind feature flag, not in production yet | Staging enables AI feature experimentation without production risk | Dev only (rejected — limits experimentation), Prod (rejected — premature) |
+| 2026-03-24 | E2E validation records are pass/fail with comments; photos optional | Photos are documentation, not test mechanisms. Consistent physical photos are impractical. | Mandatory photos (rejected — too rigid, inconsistent results) |
+| 2026-03-24 | AI interface as core architectural pattern for AI-designed apps | If AI designs, writes, tests, and will power features of the app — a first-class AI interaction layer is as fundamental as choosing state management. Should be considered for all CSDLC projects. | Treat as optional tooling (rejected — misses the architectural significance) |
 
 ---
 
