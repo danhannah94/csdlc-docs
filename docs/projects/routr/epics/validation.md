@@ -408,6 +408,34 @@ graph TD
     - Measurements: 2D design dimensions must equal 3D sim dimensions (cross-layer consistency)
 6. **Report** — On failure, output the diffs for human review
 
+#### Test Report: How AI Proves Changes Are Valid
+
+The integration test runner generates an **HTML report** (or markdown summary) on every run. This is the primary mechanism by which the AI demonstrates correctness to the human:
+
+```
+📊 Integration Test Report — 2026-03-24 14:32
+
+Fixture: pocket-rectangle
+├── G-code:      ✅ Match (no diff)
+├── Design 2D:   ✅ Match (0.1% pixel diff — within tolerance)
+├── Sim 3D:      ✅ Match (0.0% pixel diff)
+└── Measurements: ✅ 2D pocket-to-left-edge: 47.0mm | 3D: 47.0mm
+
+Fixture: edge-chamfer-top
+├── G-code:      ⚠️ Changed (diff below)
+│   - Line 42: G1 Z-3.175 → G1 Z-3.200
+│   - [Review: depth calculation adjusted]
+├── Design 2D:   ✅ Match
+├── Sim 3D:      ✅ Match
+└── Measurements: ✅ Consistent
+
+Overall: 14/16 fixtures pass | 2 changed (review required)
+```
+
+For visual diffs, the report includes **side-by-side before/after images** with pixel differences highlighted. The human scans the gallery, verifies the changes look correct, and approves. No manual screenshot capturing needed — the test infrastructure generates the evidence.
+
+The protagonist sub-agent includes this report summary in the PR description. The human reviews evidence, not code.
+
 **Baseline management:**
 
 - First run with a new fixture: `npm run test:integration -- --update` saves current outputs as baselines
@@ -485,16 +513,16 @@ A fixture file fully describes a project state — everything needed to reproduc
 
 #### Standard Camera Angles for 3D Sim Screenshots
 
-Consistent camera angles ensure deterministic screenshots:
+Consistent camera angles ensure deterministic screenshots. Start with two angles that cover all three dimensions:
 
-| Angle | Name | Use Case |
-|-------|------|----------|
-| **Default perspective** | `perspective-45` | 45° elevation, front-right corner. Standard angle for most fixtures. |
-| **Top-down orthographic** | `top-down` | Bird's eye view. Useful for verifying XY positions of cuts, pockets, drill holes. |
-| **Front orthographic** | `front` | Straight-on front view. Critical for edge treatment fixtures — shows which edge the treatment is on. |
-| **Right orthographic** | `right-side` | Side view. Useful for depth verification. |
+| Angle | Name | Use Case | What It Verifies |
+|-------|------|----------|-----------------|
+| **Default perspective** | `perspective-45` | 45° elevation, front-right corner. Standard for most fixtures. | X/Y/Z positions visible in one shot |
+| **Front orthographic** | `front` | Straight-on front view. Required for edge treatment fixtures. | Which edge a treatment is on (top vs bottom) |
 
-Most fixtures use `perspective-45` only. Edge treatment fixtures should also capture `front` to explicitly verify top vs. bottom edge rendering.
+Most fixtures use `perspective-45` only. Edge treatment fixtures also capture `front` to verify top vs. bottom edge rendering. Z-depth accuracy is verified by G-code assertions (exact Z values) and the measurement API, not screenshots — screenshots confirm visual placement, G-code confirms exact coordinates.
+
+Additional angles (`top-down`, `right-side`) can be added later if we find bugs they would have caught. Start lean, expand based on evidence.
 
 #### File Structure
 
@@ -820,30 +848,24 @@ Features extracted from this epic. Each becomes a set of implementable stories d
 |---------|---------|-------------|--------|
 | F1 | **AI-Accessible Interface** — `window.__routr` dev-mode API: fixture loading, G-code generation, canvas capture, measurement | None | |
 | F2 | **MCP Server (routr-tools)** — Separate package, Model Context Protocol wrapper for AI-driven testing and future product features | F1 | |
-| F3 | **Test Fixture Library** — JSON fixture format, TypeScript types, initial set of fixtures | F1 | |
-| F4 | **G-code Integration Tests** — Load fixture → generate G-code → assert matches `.expected.nc` + CI pipeline | F1, F3 | |
-| F5 | **Visual Regression Tests** — Playwright harness for 2D + 3D screenshot capture, pixel-diff against golden images, fixed camera angles | F1, F3 | |
-| F6 | **In-App Measurement Tool** — Point-to-point and shape-to-edge measurement in both 2D design tab and 3D sim tab, top toolbar "Measure" mode | F1 | |
-| F7 | **Cross-Layer Measurement Tests** — Automated assertions that 2D design dimensions match 3D sim dimensions | F1, F3, F6 | |
-| F8 | **Physical Validation Protocol** — Measurement recording template, validation matrix tracker | F3, F6 | |
-| F9 | **Comprehensive Fixture** — Multi-operation board exercising full pipeline | F3, F4, F5, F7 | |
+| F3 | **Test Fixture Library** — JSON fixture format, TypeScript types, initial set of fixtures (including comprehensive multi-operation fixture) | F1 | |
+| F4 | **G-code Integration Tests** — Load fixture → generate G-code → assert matches `.expected.nc` + CI pipeline + test report generation | F1, F3 | |
+| F5 | **Visual Regression + Cross-Layer Tests** — Playwright harness for 2D + 3D screenshot capture, pixel-diff, fixed camera angles, AND cross-layer measurement assertions (2D dims = 3D dims) | F1, F3, F6 | |
+| F6 | **In-App Measurement Tool** — Point-to-point and shape-to-edge measurement in both 2D design tab and 3D sim tab, top toolbar "Measure" mode (Fusion 360 style) | F1 | |
+| F7 | **Physical Validation Protocol** — Lightweight pass/fail recording, validation matrix tracker | F3, F6 | |
 
 ```mermaid
 graph TD
     F1["F1: AI-Accessible Interface<br/>(window.__routr)"] --> F2["F2: MCP Server<br/>(routr-tools, separate pkg)"]
-    F1 --> F3["F3: Test Fixture Library"]
-    F1 --> F6["F6: In-App Measurement Tool<br/>(2D + 3D)"]
-    F3 --> F4["F4: G-code Integration Tests<br/>+ CI Pipeline"]
-    F3 --> F5["F5: Visual Regression Tests"]
-    F3 --> F7["F7: Cross-Layer<br/>Measurement Tests"]
+    F1 --> F3["F3: Test Fixture Library<br/>(incl. comprehensive fixture)"]
+    F1 --> F6["F6: In-App Measurement Tool<br/>(2D + 3D, Fusion 360 style)"]
+    F3 --> F4["F4: G-code Integration Tests<br/>+ CI Pipeline + Test Report"]
+    F3 --> F5["F5: Visual Regression +<br/>Cross-Layer Measurement Tests"]
+    F6 --> F5
+    F3 --> F7["F7: Physical Validation<br/>Protocol (lightweight)"]
     F6 --> F7
-    F3 --> F8["F8: Physical Validation Protocol"]
-    F6 --> F8
-    F3 --> F9["F9: Comprehensive Fixture"]
-    F4 --> F9
-    F5 --> F9
-    F7 --> F9
-    F2 --> |"Enables protagonist/<br/>antagonist pattern"| F9
+    F2 --> |"Enables protagonist/<br/>antagonist pattern"| F4
+    F2 --> |"Enables exploratory<br/>testing"| F5
 ```
 
 *Features are broken down into implementable stories during Step 1 (Story Breakdown). This table is the feature index.*
@@ -874,6 +896,9 @@ graph TD
 | 2026-03-24 | `window.__routr` on staging behind feature flag, not in production yet | Staging enables AI feature experimentation without production risk | Dev only (rejected — limits experimentation), Prod (rejected — premature) |
 | 2026-03-24 | E2E validation records are pass/fail with comments; photos optional | Photos are documentation, not test mechanisms. Consistent physical photos are impractical. | Mandatory photos (rejected — too rigid, inconsistent results) |
 | 2026-03-24 | AI interface as core architectural pattern for AI-designed apps | If AI designs, writes, tests, and will power features of the app — a first-class AI interaction layer is as fundamental as choosing state management. Should be considered for all CSDLC projects. | Treat as optional tooling (rejected — misses the architectural significance) |
+| 2026-03-24 | Consolidated features: 7 instead of 9 | Comprehensive fixture absorbed into F3 (it's just another fixture). Cross-layer measurement tests absorbed into F5 (it's 3 lines of assertion code per fixture, not a standalone feature). Eliminates overhead without losing coverage. | Keep all 9 (rejected — added process overhead without proportional value) |
+| 2026-03-24 | Two camera angles (perspective-45 + front), not four | Perspective-45 shows X/Y/Z. Front shows edge treatments. Z-depth verified by G-code assertions + measurement API, not screenshots. Start lean, add angles based on evidence. | Four angles (rejected — top-down and right-side add maintenance without catching bugs the other two miss) |
+| 2026-03-24 | Auto-generated test report for proving validity to human | Human reviews evidence (report with diffs, screenshots, measurements), not code. Test runner generates the proof automatically — no manual screenshot capturing. | Manual PR screenshots (rejected — tedious, inconsistent, nobody does it reliably) |
 
 ---
 
