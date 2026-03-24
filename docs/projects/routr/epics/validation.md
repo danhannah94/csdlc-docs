@@ -190,18 +190,18 @@ graph LR
 
 ### CI/CD Strategy
 
-**Hybrid approach: GitHub Actions CI for cheap, repetitive checks + local execution for AI-driven work.**
+**Local-first approach: all tests run locally as part of the sub-agent development workflow. GitHub Actions CI deferred until team size or failure rate justifies the overhead.**
 
 | Test Type | Where It Runs | Why |
 |-----------|--------------|-----|
-| Unit tests | **GitHub Actions CI** | Fast, deterministic, zero token cost. Catches regressions on every PR without spending AI compute. |
-| G-code integration tests | **GitHub Actions CI** | Deterministic string comparison — perfect for CI. No rendering needed. |
-| Visual regression tests (screenshots) | **Local first, CI later** | Playwright screenshot tests can be flaky across environments. Start local, promote to CI once stable. |
+| Unit tests | **Local (Vitest)** | AI Lead runs before every PR. Sub-agent verification step. |
+| G-code integration tests | **Local (Vitest)** | Deterministic string comparison. Sub-agent includes markdown report in PR description. |
+| Visual regression tests (screenshots) | **Local (Playwright + pixelmatch)** | Browser-dependent, flaky across environments. Local ensures consistency. |
 | E2E (physical validation) | **Local only** | Human runs the CNC machine. |
 
-The sub-agent development workflow makes traditional CI/CD less critical for the *development* loop — the AI Lead reviews and tests before PRs are created. But CI adds a safety net *between* sessions: a PR that sneaks in a coordinate bug gets caught on push, even if no one ran the tests manually. CI is the overnight security guard; sub-agents are the daytime crew.
+The sub-agent development workflow makes traditional CI/CD less critical — the AI Lead reviews and runs all tests before PRs are created. No PR has shipped with broken tests to date. The agent prompt template in WORKFLOW.md ensures every sub-agent runs integration tests as a verification step.
 
-GitHub Actions CI will be configured as a **required status check** — PRs cannot merge until unit tests and G-code integration tests pass. This is a quality gate, same as any other in the pipeline.
+**Future: GitHub Actions CI.** When the team grows beyond one human + one AI Lead, or when a regression slips through, add CI as a required status check. The test infrastructure is CI-ready (Vitest, no browser needed for G-code tests) — it's a configuration task, not a rewrite. Tracked as a Future ticket.
 
 ---
 
@@ -992,6 +992,42 @@ graph TD
 
 ---
 
+### F4: G-code Integration Tests — Stories
+
+**Dependency graph:**
+
+```mermaid
+graph TD
+    S1["F4-S1: G-code Test Harness<br/>(Vitest, auto-discovery)"] --> S2["F4-S2: Test Report &<br/>Dev Workflow Integration"]
+
+    F3_S5["F3-S5: Fixture Validation<br/>Script (baseline mgmt)"] -.-> S1
+    F1_S3["F1-S3: G-code Generation<br/>Hooks"] -.-> S1
+
+    S2 -.-> WORKFLOW["WORKFLOW.md<br/>Agent Template Update"]
+
+    style S1 fill:#e67e22,color:#fff
+    style S2 fill:#e67e22,color:#fff
+    style F3_S5 fill:#555,color:#fff
+    style F1_S3 fill:#555,color:#fff
+    style WORKFLOW fill:#555,color:#fff
+```
+
+*Both stories are serial — S2 builds on S1. Only two stories because the scope is focused: no CI, baseline management lives in F3.*
+
+#### Design Notes
+
+- **No GitHub Actions CI.** All tests run locally as part of sub-agent verification. CI deferred to a Future ticket (see CI/CD Strategy section and Decisions Log). The test infrastructure is CI-ready if/when we add it — Vitest, no browser, deterministic.
+- **Baseline management is F3's responsibility.** F4 reads `.expected.nc` baselines but does not create or update them. To regenerate baselines after intentional changes: `npm run validate-fixtures -- --generate` (F3-S5's script). Clean separation: F3 owns fixtures + baselines, F4 owns assertions + reporting.
+- **Dynamic fixture discovery.** The test harness auto-discovers `*.fixture.json` files in `src/__fixtures__/`. Adding a new fixture + baseline automatically adds a test case. Zero boilerplate.
+- **Fixtures without baselines are skipped, not failed.** `straight-cut-basic` (and any future fixture blocked on a bug) appears in the report as `⏭️ SKIPPED — No baseline` rather than pass or fail. When the baseline is generated, the test automatically activates.
+
+| Story | Name | Size | Description | Acceptance Criteria |
+|-------|------|------|-------------|-------------------|
+| **F4-S1** | G-code Integration Test Harness | Medium | Create a Vitest test suite that dynamically discovers all fixtures in `src/__fixtures__/`, loads each via `window.__routr.loadFixture()`, generates G-code via `generateGcode()`, and asserts the output matches the corresponding `.expected.nc` baseline. This is the core regression detection mechanism for the G-code pipeline. | ① Single test file `src/__tests__/integration/gcode.test.ts` that auto-discovers all `*.fixture.json` files in `src/__fixtures__/`. ② For each fixture with a corresponding `.expected.nc`: loads fixture via `loadFixture()`, calls `generateGcode()`, asserts character-by-character match against baseline. ③ For each fixture without a `.expected.nc` (e.g., `straight-cut-basic`): loads fixture, calls `generateGcode()`, asserts no errors thrown, marks test as skipped (not failed). ④ On assertion failure, the test output includes a readable diff showing exactly which lines changed between expected and actual G-code. ⑤ `npm run test:integration:gcode` added to `package.json` — runs only the G-code integration tests (not unit tests, not visual). ⑥ All existing unit tests continue to pass (`npm test -- --run`). ⑦ Test runs in under 5 seconds for the initial fixture set (fast enough for sub-agent verification loops). |
+| **F4-S2** | Test Report & Dev Workflow Integration | Small | Create a markdown report generator that summarizes G-code integration test results in a format suitable for PR descriptions. Update the agent prompt template in WORKFLOW.md to include integration test commands as a mandatory verification step. | ① After running `npm run test:integration:gcode`, a markdown report is generated (either to stdout or a file) showing per-fixture results: ✅ PASS (matches baseline), ❌ FAIL (diff summary), ⏭️ SKIPPED (no baseline). ② Report includes a summary line: `X/Y fixtures pass | Z skipped | W failed`. ③ On failure, the report includes the first ~20 lines of diff per failing fixture (enough context without overwhelming the PR description). ④ Report format is copy-pasteable into a GitHub PR description body — valid markdown, renders correctly. ⑤ WORKFLOW.md agent prompt template updated: verification section includes `npm run test:integration:gcode` as a mandatory step, with instructions to include the report in PR descriptions. ⑥ WORKFLOW.md documents the baseline update workflow: "If G-code output changed intentionally → review the diff → run `npm run validate-fixtures -- --generate` → commit updated baselines with the PR." |
+
+---
+
 ## Decisions Log
 
 | Date | Decision | Rationale | Alternatives Considered |
@@ -1027,6 +1063,12 @@ graph TD
 | 2026-03-26 | Fixture validation script as F3 quality gate | The script is how the AI Lead proves to the human that F3 is complete — "all fixtures load and generate G-code without errors." Without it, F3 is just JSON files with no proof they work. | No validation script (rejected — no quality gate) |
 | 2026-03-26 | Fixtures in `src/__fixtures__/` (not alongside tests) | Fixtures are consumed by F4, F5, AND F7 — shared test data, not coupled to one test suite. Central location keeps them accessible to all downstream consumers. | Alongside devApi tests (rejected — couples to one consumer) |
 | 2026-03-26 | Keep stories in epic doc (don't split) | One epic, one doc. F1 stories already live here. Splitting creates navigation friction ("which doc?"). Context fatigue managed by not loading the full doc in sub-agent prompts, not by splitting the source of truth. | Separate stories doc (rejected — navigation overhead, split source of truth) |
+| 2026-03-26 | Defer GitHub Actions CI — local-first testing | No PR has shipped with broken tests. AI Lead runs all tests before every PR. CI adds setup/maintenance overhead for a problem that doesn't exist yet. Test infrastructure is CI-ready when needed. | CI from day one (rejected — overhead without demonstrated need) |
+| 2026-03-26 | Consolidate baseline management in F3 | F3-S5's validation script handles baseline generation/regeneration. F4 reads baselines and asserts. One tool, one command, one place to maintain. Avoids two scripts doing the same thing. | Separate F4 update command (rejected — duplication) |
+| 2026-03-26 | F4 test harness auto-discovers fixtures | Single test file dynamically discovers `*.fixture.json` files. Adding a new fixture automatically adds a test case — zero boilerplate. | Per-fixture test files (rejected — manual maintenance, boilerplate) |
+| 2026-03-26 | Fixtures without baselines → skipped (not failed) | `straight-cut-basic` blocked on kerf flip. Skipping is accurate — "no baseline" ≠ "test failed." When baseline is generated, test automatically activates. | Skip fixture entirely (rejected — loses visibility), Fail (rejected — inaccurate) |
+| 2026-03-26 | Markdown test report (not HTML) for F4 | Renders natively in GitHub PR descriptions. Sub-agents paste report directly into PR body. HTML makes sense for F5 when screenshot galleries are needed. | HTML report (rejected for F4 — no screenshots to display, adds hosting complexity) |
+| 2026-03-26 | Update WORKFLOW.md agent template as part of F4 | Sub-agents must run integration tests as a verification step. Template update ensures this is baked into every future sub-agent prompt. Compensates for deferred CI — the template IS the quality gate. | Separate ticket (rejected — tightly coupled to F4's test harness) |
 | 2026-03-24 | Orthographic views only: top-down + front | Perspective projection introduces angle distortion that makes pixel-diff unreliable — a shift could be real or just a projection artifact. Orthographic views map pixel positions directly to board positions. Top-down covers X/Y, front covers X/Z. All three dimensions verified without angle correction math. | Perspective-45 + front (rejected — perspective distortion complicates position verification), four angles (rejected — two orthographic + measurement API provides complete coverage) |
 | 2026-03-24 | Auto-generated test report for proving validity to human | Human reviews evidence (report with diffs, screenshots, measurements), not code. Test runner generates the proof automatically — no manual screenshot capturing. | Manual PR screenshots (rejected — tedious, inconsistent, nobody does it reliably) |
 
