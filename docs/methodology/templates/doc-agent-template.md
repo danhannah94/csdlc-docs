@@ -1,7 +1,7 @@
 # Doc-Writing Agent Template
 
 *Reusable prompt structure for spawning sub-agents that write or update design docs.*
-*Based on [PROCESS.md](process.md) — used by the AI Lead when crafting doc-writing agent prompts.*
+*Based on [PROCESS.md](../process.md) — used by the AI Lead when crafting doc-writing agent prompts.*
 
 ---
 

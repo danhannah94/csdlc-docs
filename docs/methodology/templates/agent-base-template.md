@@ -96,4 +96,4 @@ Define your project's conventions here. Examples:
 
 ---
 
-*This template is based on the [CSDLC methodology](../methodology/process.md). Customize it for your project's specific needs.*
+*This template is based on the [CSDLC methodology](../process.md). Customize it for your project's specific needs.*

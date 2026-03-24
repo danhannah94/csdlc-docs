@@ -14,8 +14,8 @@ CSDLC is a repeatable, auditable methodology for human-AI collaborative software
 
 - **[CSDLC Process](methodology/process.md)** — The full methodology
 - **[Core Values](methodology/core-values.md)** — What we stand on
-- **[Workflow Template](methodology/workflow-template.md)** — Project-specific workflow template
-- **[Agent Base Template](methodology/agent-base-template.md)** — Sub-agent prompt template
+- **[Workflow Template](methodology/templates/workflow-template.md)** — Project-specific workflow template
+- **[Agent Base Template](methodology/templates/agent-base-template.md)** — Sub-agent prompt template
 
 ## Projects
 

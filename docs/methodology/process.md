@@ -213,7 +213,7 @@ The critical translation layer — where methodology becomes execution. The AI L
 
 **Reusable prompt templates:**
 - **Implementation agents** — use the project's WORKFLOW.md QA Agent Template for structure
-- **Doc-writing agents** — use the [Doc-Writing Agent Template](csdlc-docs/docs/methodology/doc-agent-template.md) for retroactive documentation, doc updates, and code-to-doc audits
+- **Doc-writing agents** — use the [Doc-Writing Agent Template](templates/doc-agent-template.md) for retroactive documentation, doc updates, and code-to-doc audits
 
 ### Step 3: Sub-agent Execution
 

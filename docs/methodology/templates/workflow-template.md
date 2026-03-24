@@ -1,7 +1,7 @@
 # Workflow Template — Project-Specific CSDLC Implementation
 
 *Copy this template into your project repo as `WORKFLOW.md` and fill in the details.*
-*Based on [PROCESS.md](process.md).*
+*Based on [PROCESS.md](../process.md).*
 
 ---
 
@@ -219,4 +219,4 @@ Document project-specific pitfalls here. Examples:
 
 ---
 
-*This workflow implements [PROCESS.md](process.md) for this specific project. Universal methodology stays in PROCESS.md; project specifics live here.*
+*This workflow implements [PROCESS.md](../process.md) for this specific project. Universal methodology stays in PROCESS.md; project specifics live here.*

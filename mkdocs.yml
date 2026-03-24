@@ -36,12 +36,13 @@ nav:
     - Applying CSDLC: methodology/applying-csdlc.md
     - Lessons Learned: methodology/lessons-learned.md
     - Open Questions: methodology/open-questions.md
-    - Workflow Template: methodology/workflow-template.md
-    - Agent Base Template: methodology/agent-base-template.md
-    - Doc-Writing Agent Template: methodology/doc-agent-template.md
-    - Project Design Doc Template: methodology/project-design-template.md
-    - Sub-system Design Doc Template: methodology/subsystem-design-template.md
-    - Epic Design Doc Template: methodology/epic-design-template.md
+    - Templates:
+      - Project Design Doc: methodology/templates/project-design-template.md
+      - Sub-system Design Doc: methodology/templates/subsystem-design-template.md
+      - Epic Design Doc: methodology/templates/epic-design-template.md
+      - Workflow: methodology/templates/workflow-template.md
+      - Agent Base: methodology/templates/agent-base-template.md
+      - Doc-Writing Agent: methodology/templates/doc-agent-template.md
   - Projects:
     - Routr:
       - Design: projects/routr/design.md

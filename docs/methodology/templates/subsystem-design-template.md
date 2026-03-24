@@ -1,7 +1,7 @@
 # Sub-system Design Doc Template
 
 *Copy this template to `docs/projects/your-project/sub-systems/subsystem-name.md` and fill it out through collaborative refinement.*
-*Based on [PROCESS.md](process.md) — sub-system design docs sit between the project-level doc and epic-level docs.*
+*Based on [PROCESS.md](../process.md) — sub-system design docs sit between the project-level doc and epic-level docs.*
 
 ---
 

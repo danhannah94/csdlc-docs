@@ -1,7 +1,7 @@
 # Project Design Doc Template
 
 *Copy this template to `docs/projects/your-project/design.md` and fill it out through collaborative refinement.*
-*Based on [PROCESS.md](process.md) — project-level design docs.*
+*Based on [PROCESS.md](../process.md) — project-level design docs.*
 
 ---
 

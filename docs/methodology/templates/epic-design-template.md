@@ -1,7 +1,7 @@
 # Epic Design Doc Template
 
 *Copy this template to `docs/projects/your-project/epics/epic-name.md` and fill it out through collaborative refinement.*
-*Based on [PROCESS.md](process.md) — epic-level design docs.*
+*Based on [PROCESS.md](../process.md) — epic-level design docs.*
 
 ---
 
