@@ -86,6 +86,45 @@ No restructuring, no special frontmatter, no format changes. If it's a directory
 
 ---
 
+## Competitive Landscape
+
+The core idea of "MCP server that indexes markdown for AI agents" is **validated, not novel.** Multiple tools exist in this space. We're building LLMkDocs anyway — here's what exists and why our approach is different.
+
+### Existing Tools
+
+| Tool | What It Does | Language | Key Strengths | Key Weaknesses |
+|------|-------------|----------|--------------|----------------|
+| **markdown-vault-mcp** | Generic markdown MCP server, FTS5 + semantic + hybrid search, read/write | Python | Most mature. Write tools, Docker, systemd, frontmatter-aware. 13 MCP tools. | Python-only. Generic "search your files" — no awareness of doc structure or project relationships. |
+| **mkdocs-mcp-plugin** | mkdocs-specific MCP with keyword + vector + hybrid search | Python | Tight mkdocs integration, auto-detects mkdocs.yml | Coupled to mkdocs — requires dev server running. Not standalone. |
+| **MCP-Markdown-RAG** | Markdown RAG via Milvus vector DB | Python | Solid incremental indexing | Requires Milvus (heavy infrastructure). Not zero-config. |
+| **document-mcp** | Multi-format local doc indexer with LanceDB + Ollama | Python | Supports PDF, Word, RTF, not just markdown | Requires Ollama running. Heavy dependencies. Personal tool, not team-ready. |
+
+### Why We're Still Building This
+
+**1. Supply chain ownership.** LLMkDocs is foundational to CSDLC — our entire sub-agent workflow depends on agents querying docs. We can't have that dependency on an external PyPI package with uncertain maintenance. Owning the tool means we control our own process.
+
+**2. TypeScript / zero-config.** Every existing tool is Python. The MCP ecosystem is TypeScript-first. `npx llmkdocs --docs ./path` with zero Python dependency is a meaningful DX gap.
+
+**3. CSDLC-native intelligence (v2+).** Existing tools are generic document search — "find stuff in my files." We're building toward project-aware context retrieval:
+- Understanding design doc → epic → story hierarchy
+- Serving different context depth for different agent roles (architecture overview vs. implementation detail)
+- Knowing that a sub-agent on E2 needs E1 context but not E3
+- Integration with standup rituals, cross-cutting concerns, session bootstrapping
+
+These features are only possible because we own the tool and built it for our workflow.
+
+**4. Heading-based chunking.** Most tools use fixed token windows or paragraph splitting. Our heading-hierarchy chunking with breadcrumb metadata is a genuine quality differentiator for structured documentation.
+
+**5. Self-managing server.** File watching + staleness checks + auto-reindexing. Most tools require manual index triggers or separate rebuild steps.
+
+### Our Position
+
+We're not inventing the mousetrap — we're building a better one, purpose-built for our workflow. The existing tools prove market demand. Our differentiation is DX (TypeScript, zero-config, `npx`), quality (heading-based chunking), and vision (CSDLC-aware documentation intelligence layer, not generic file search).
+
+If the open-source community gets value from it, that's a bonus. But **the primary consumer is us.**
+
+---
+
 ## Tech Stack
 
 | Layer | Technology | Rationale |
@@ -612,6 +651,7 @@ graph LR
 | 2026-03-28 | Self-managing MCP server (auto-index, file watcher) | Eliminates manual rebuild step entirely. File watcher + staleness check on query = always-fresh DB. | Manual rebuild (rejected: humans forget), git hooks (rejected: unnecessary if server handles it), CI-built DB (rejected: adds sync complexity) |
 | 2026-03-28 | Decouple from mkdocs entirely | MCP server reads markdown files directly — no mkdocs dependency. Works with any docs directory. Massively expands addressable market. | mkdocs plugin (rejected: couples to one ecosystem, limits to Python users, requires separate MCP server process) |
 | 2026-03-28 | All-TypeScript, single process | ONNX runtime in Node.js eliminates Python dependency. One language, one install, one process. | Python + TypeScript split (rejected: two languages, two installs, shared state via file was fragile) |
+| 2026-03-28 | Build despite existing tools | Supply chain ownership (CSDLC depends on this), TypeScript gap in market, CSDLC-native features planned for v2+, heading-based chunking differentiator | Use markdown-vault-mcp (rejected: Python, generic, no CSDLC awareness, supply chain risk), contribute upstream (rejected: different vision, different language) |
 
 ---
 
