@@ -1,4 +1,4 @@
-# LLMkDocs — Project Design Doc
+# Anvil — Project Design Doc
 
 *Status: Draft — Step 0 Refinement*
 *Created: March 28, 2026*
@@ -10,11 +10,11 @@
 
 ### What Is This?
 
-LLMkDocs is an open-source MCP server that makes any document collection queryable by AI agents. Point it at a directory of markdown files (or any supported format), and it automatically chunks your content by structure, generates embeddings using a local model, and stores them in a local vector database. Agents connect via MCP and semantically search your docs on demand — no copy-pasting context, no manual curation, no external services required.
+Anvil is an open-source MCP server that makes any document collection queryable by AI agents. Point it at a directory of markdown files (or any supported format), and it automatically chunks your content by structure, generates embeddings using a local model, and stores them in a local vector database. Agents connect via MCP and semantically search your docs on demand — no copy-pasting context, no manual curation, no external services required.
 
 Point it at your docs → agents can query them. That's the entire promise.
 
-While the name evokes mkdocs (and it works beautifully alongside mkdocs projects), **LLMkDocs is not coupled to mkdocs.** It's a standalone tool that works with any directory of documents. Technical docs, manuscripts, knowledge bases, legal libraries — if it's text in files, LLMkDocs can index it.
+While the name evokes mkdocs (and it works beautifully alongside mkdocs projects), **Anvil is not coupled to mkdocs.** It's a standalone tool that works with any directory of documents. Technical docs, manuscripts, knowledge bases, legal libraries — if it's text in files, Anvil can index it.
 
 ### Why This Exists — The Dual-Audience Problem
 
@@ -30,7 +30,7 @@ But now there's a second audience: **AI agents.** And their needs are fundamenta
 | **Freshness** | Checks docs when they remember to | Needs docs current as of the last build, every session |
 | **Context** | Carries knowledge between reading sessions | **Starts from zero every session** — the cold start problem |
 
-LLMkDocs bridges this gap. **The human gets mkdocs** — the same beautiful, browsable site they've always had. **The agent gets an MCP server** — semantic search over the same content, returning exactly the chunks it needs. Both audiences consume the same source of truth, in their optimal format.
+Anvil bridges this gap. **The human gets mkdocs** — the same beautiful, browsable site they've always had. **The agent gets an MCP server** — semantic search over the same content, returning exactly the chunks it needs. Both audiences consume the same source of truth, in their optimal format.
 
 ### The Collaboration Unlock
 
@@ -58,25 +58,25 @@ The broader vision informs architecture decisions (format-agnostic, not hardcode
 
 ### Bootstrapping with Existing Projects
 
-LLMkDocs is designed to drop into any existing project with zero migration:
+Anvil is designed to drop into any existing project with zero migration:
 
-1. `npm install -g llmkdocs` (or `npx llmkdocs`)
-2. `llmkdocs --docs ./docs/`
+1. `npm install -g anvil` (or `npx anvil`)
+2. `anvil --docs ./docs/`
 3. MCP server starts, indexes your docs on first run, and is ready for agent queries.
 
-No restructuring, no special frontmatter, no format changes. If it's a directory of text files, LLMkDocs can index it. This applies to existing projects like our Routr CSDLC docs, internal documentation at work, or any markdown-based project.
+No restructuring, no special frontmatter, no format changes. If it's a directory of text files, Anvil can index it. This applies to existing projects like our Routr CSDLC docs, internal documentation at work, or any markdown-based project.
 
 **First-run experience:** The initial indexing (30-60 seconds for a large corpus) happens once on first startup. The MCP server shows progress and becomes available for queries as soon as indexing completes. Every subsequent startup is near-instant (loads existing DB, checks for changes).
 
 ### Business Model
 
-**Open-source core (BSD or MIT license).** The CLI, local embeddings, local vector DB, and MCP server are free forever. This is the developer wedge — how people discover LLMkDocs and prove it works.
+**Open-source core (BSD or MIT license).** The CLI, local embeddings, local vector DB, and MCP server are free forever. This is the developer wedge — how people discover Anvil and prove it works.
 
 **Monetization tiers (not v1 — informs architecture, not scope):**
 
 | Tier | What | Who Pays | Why They Pay |
 |------|------|----------|-------------|
-| **Open-source CLI** | `npx llmkdocs --docs ./path` — local everything, stdio MCP | Free forever | Adoption, community, developer trust |
+| **Open-source CLI** | `npx anvil --docs ./path` — local everything, stdio MCP | Free forever | Adoption, community, developer trust |
 | **Cloud sync** | DB auto-syncs to cloud. MCP accessible from anywhere. Team sharing. | Teams, small companies | Collaboration — multiple people/agents query the same docs |
 | **Managed service** | Upload docs via web UI, get an MCP endpoint. No CLI needed. | Non-technical users (authors, legal, enterprise) | They want the value without the terminal |
 | **Analytics** | "Which docs do agents query most?" "Which sections have low retrieval quality?" | Anyone optimizing docs for AI | Data-driven doc improvement |
@@ -88,7 +88,7 @@ No restructuring, no special frontmatter, no format changes. If it's a directory
 
 ## Competitive Landscape
 
-The core idea of "MCP server that indexes markdown for AI agents" is **validated, not novel.** Multiple tools exist in this space. We're building LLMkDocs anyway — here's what exists and why our approach is different.
+The core idea of "MCP server that indexes markdown for AI agents" is **validated, not novel.** Multiple tools exist in this space. We're building Anvil anyway — here's what exists and why our approach is different.
 
 ### Existing Tools
 
@@ -101,9 +101,9 @@ The core idea of "MCP server that indexes markdown for AI agents" is **validated
 
 ### Why We're Still Building This
 
-**1. Supply chain ownership.** LLMkDocs is foundational to CSDLC — our entire sub-agent workflow depends on agents querying docs. We can't have that dependency on an external PyPI package with uncertain maintenance. Owning the tool means we control our own process.
+**1. Supply chain ownership.** Anvil is foundational to CSDLC — our entire sub-agent workflow depends on agents querying docs. We can't have that dependency on an external PyPI package with uncertain maintenance. Owning the tool means we control our own process.
 
-**2. TypeScript / zero-config.** Every existing tool is Python. The MCP ecosystem is TypeScript-first. `npx llmkdocs --docs ./path` with zero Python dependency is a meaningful DX gap.
+**2. TypeScript / zero-config.** Every existing tool is Python. The MCP ecosystem is TypeScript-first. `npx anvil --docs ./path` with zero Python dependency is a meaningful DX gap.
 
 **3. CSDLC-native intelligence (v2+).** Existing tools are generic document search — "find stuff in my files." We're building toward project-aware context retrieval:
 - Understanding design doc → epic → story hierarchy
@@ -161,7 +161,7 @@ The entire product — file watching, chunking, embedding, vector storage, and M
 
 The default embedding model runs locally — no API key, no network calls, no cost per query. This is a deliberate choice:
 
-- **Zero friction adoption:** `npx llmkdocs --docs ./path` and you're done. No OpenAI account, no API key management, no billing surprises.
+- **Zero friction adoption:** `npx anvil --docs ./path` and you're done. No OpenAI account, no API key management, no billing surprises.
 - **Good enough for docs:** You're searching within a bounded corpus (your own docs), not the entire internet. The quality difference between MiniLM and OpenAI embeddings matters less when the search space is small and well-structured.
 - **Upgrade path exists:** Users who want higher quality can switch to OpenAI (or Bedrock, or any provider) with one config line.
 
@@ -183,7 +183,7 @@ This means:
 
 ```mermaid
 graph TB
-    subgraph "LLMkDocs MCP Server (single Node.js process)"
+    subgraph "Anvil MCP Server (single Node.js process)"
         A[File Watcher] -->|detect changes| B[Chunker]
         B -->|heading-based splits| C[Embedder — local ONNX model]
         C -->|upsert| D[(sqlite-vss DB)]
@@ -222,7 +222,7 @@ Receives agent queries via MCP protocol (stdio transport). Before each query, ch
 #### Startup: First-Run Indexing
 
 ```
-User runs: npx llmkdocs --docs ./docs/
+User runs: npx anvil --docs ./docs/
     → MCP server starts
     → Scans docs directory — no existing DB or DB is empty
     → Chunks ALL files by heading hierarchy
@@ -315,11 +315,11 @@ CREATE TABLE chunks (
 );
 
 -- Metadata table for DB self-description
-CREATE TABLE llmkdocs_meta (
+CREATE TABLE anvil_meta (
     key TEXT PRIMARY KEY,
     value TEXT
 );
--- Stores: embedding_model, embedding_dimensions, last_index_timestamp, llmkdocs_version, docs_root_path
+-- Stores: embedding_model, embedding_dimensions, last_index_timestamp, anvil_version, docs_root_path
 
 -- sqlite-vss virtual table for vector search
 CREATE VIRTUAL TABLE chunks_vss USING vss0(
@@ -329,7 +329,7 @@ CREATE VIRTUAL TABLE chunks_vss USING vss0(
 
 ### Chunking Strategy
 
-**Split on headings, not token count.** Most RAG systems chunk by fixed token windows (500 tokens, 1000 tokens). This is wrong for documentation because it splits mid-section, losing semantic coherence. LLMkDocs chunks at heading boundaries — each section under a heading becomes one chunk.
+**Split on headings, not token count.** Most RAG systems chunk by fixed token windows (500 tokens, 1000 tokens). This is wrong for documentation because it splits mid-section, losing semantic coherence. Anvil chunks at heading boundaries — each section under a heading becomes one chunk.
 
 **Problem:** Some sections are very long (2000+ tokens). **Solution:** If a chunk exceeds a configurable max (default: 1500 tokens), split at paragraph boundaries within that section. The heading breadcrumb is preserved on all sub-chunks, with a part indicator (e.g., `Architecture > Data Flow [part 2/3]`).
 
@@ -380,7 +380,7 @@ If write tools are added in the future, they would write to markdown source and 
 
 ### What Are These?
 
-`llms.txt` is an [emerging convention](https://llmstxt.org/) for making website content accessible to LLMs. LLMkDocs generates two files:
+`llms.txt` is an [emerging convention](https://llmstxt.org/) for making website content accessible to LLMs. Anvil generates two files:
 
 - **`llms.txt`** — A structured site map listing every page with its title, path, and a one-line description. Think `robots.txt` but for LLMs. An agent reads this to understand what documentation exists and where it lives.
 - **`llms-full.txt`** — The full content of every page concatenated into one text file, with page boundaries marked by headers.
@@ -397,7 +397,7 @@ MCP search returns 500-1,000 targeted tokens per query. That's the difference �
 
 ### MVP Scope Decision
 
-**Deferred to v2.** llms.txt generation is not included in the v1 MVP. The core value prop is MCP semantic search — llms.txt serves a different audience (non-MCP clients) that we're not targeting yet. When we're ready to share LLMkDocs with the broader community, llms.txt becomes a valuable adoption tool. For now, it's overhead.
+**Deferred to v2.** llms.txt generation is not included in the v1 MVP. The core value prop is MCP semantic search — llms.txt serves a different audience (non-MCP clients) that we're not targeting yet. When we're ready to share Anvil with the broader community, llms.txt becomes a valuable adoption tool. For now, it's overhead.
 
 ---
 
@@ -407,24 +407,24 @@ MCP search returns 500-1,000 targeted tokens per query. That's the difference �
 
 ```bash
 # Zero-config start — all defaults, just point at your docs
-npx llmkdocs --docs ./docs/
+npx anvil --docs ./docs/
 
 # With options
-npx llmkdocs \
+npx anvil \
   --docs ./docs/ \
-  --db ./llmkdocs.db \
+  --db ./anvil.db \
   --embedding-provider openai \
   --max-chunk-tokens 1500
 ```
 
 ### Config File (optional)
 
-For projects that want persistent config, create `llmkdocs.config.json` in the docs root:
+For projects that want persistent config, create `anvil.config.json` in the docs root:
 
 ```json
 {
   "docs": "./docs",
-  "db": "./llmkdocs.db",
+  "db": "./anvil.db",
   "embedding": {
     "provider": "local",
     "model": "all-MiniLM-L6-v2"
@@ -444,7 +444,7 @@ For projects that want persistent config, create `llmkdocs.config.json` in the d
 ### Minimal Start (Zero Config)
 
 ```bash
-npx llmkdocs --docs ./docs/
+npx anvil --docs ./docs/
 ```
 
 That's it. All defaults apply: local ONNX embeddings, 1500 max tokens, DB written alongside the docs directory. **No API key, no config file, no Python required.**
@@ -454,9 +454,9 @@ That's it. All defaults apply: local ONNX embeddings, 1500 max tokens, DB writte
 ```json
 {
   "mcpServers": {
-    "llmkdocs": {
+    "anvil": {
       "command": "npx",
-      "args": ["llmkdocs", "--docs", "./path/to/docs"],
+      "args": ["anvil", "--docs", "./path/to/docs"],
       "transport": "stdio"
     }
   }
@@ -474,7 +474,7 @@ The v1 deployment model is **local, self-managing, zero-config.** The MCP server
 ```mermaid
 graph LR
     subgraph "Your Machine"
-        A[Docs Directory] --> B[LLMkDocs MCP Server]
+        A[Docs Directory] --> B[Anvil MCP Server]
         B --> C[(sqlite-vss DB)]
         B --> D[AI Agent]
     end
@@ -485,7 +485,7 @@ graph LR
     end
 ```
 
-**The MCP server and mkdocs are completely independent.** mkdocs builds the human-facing site. LLMkDocs indexes the same source files for agents. Neither depends on the other. You can use LLMkDocs without mkdocs, or mkdocs without LLMkDocs.
+**The MCP server and mkdocs are completely independent.** mkdocs builds the human-facing site. Anvil indexes the same source files for agents. Neither depends on the other. You can use Anvil without mkdocs, or mkdocs without Anvil.
 
 ### Keeping the DB Fresh — It's Automatic
 
@@ -521,7 +521,7 @@ The MCP server owns the entire indexing pipeline. Freshness is built in, not bol
 | `sqlite-vss` native extension | Yes | Vector similarity search. Ships as a pre-built binary via npm for most platforms. |
 | `@huggingface/transformers` | Yes (default embeddings) | Local ONNX model inference. ~80MB model download on first run, cached after. |
 | OpenAI API key | Only if `embedding_provider: openai` | Optional upgrade for higher-quality embeddings. |
-| Python / mkdocs | **No** | LLMkDocs is fully independent. mkdocs is only needed if you want the human-facing site. |
+| Python / mkdocs | **No** | Anvil is fully independent. mkdocs is only needed if you want the human-facing site. |
 
 ---
 
@@ -540,14 +540,14 @@ The MCP server owns the entire indexing pipeline. Freshness is built in, not bol
 
 ### Public vs. Private Documentation
 
-LLMkDocs doesn't manage access control — it inherits whatever access model your docs repo uses. Some considerations:
+Anvil doesn't manage access control — it inherits whatever access model your docs repo uses. Some considerations:
 
 - **Public repo, public docs:** No concerns. The DB contains the same content that's already public.
 - **Private repo, private docs:** DB should also be private. Don't publish it as a public artifact.
 - **Mixed (some public, some private):** Not supported in v1. Either all docs are indexed or none. v2 could support per-page or per-directory inclusion/exclusion via config.
 
 !!! note "Splitting Public and Private"
-    If you want some docs public (e.g., methodology, process) and others private (e.g., project implementations), the recommended approach is **separate repos** — a public repo for shareable content and a private repo for project-specific docs. Each gets its own LLMkDocs instance and vector DB.
+    If you want some docs public (e.g., methodology, process) and others private (e.g., project implementations), the recommended approach is **separate repos** — a public repo for shareable content and a private repo for project-specific docs. Each gets its own Anvil instance and vector DB.
 
 ### Trust Boundaries
 
@@ -664,11 +664,11 @@ graph LR
 | **Vector DB** | A database optimized for storing and searching vector embeddings. sqlite-vss is the local/file-based option. |
 | **MCP** | Model Context Protocol — a standard for LLM clients to connect to external tools and data sources. |
 | **llms.txt** | An emerging convention for making website content LLM-accessible. A site map with descriptions (llms.txt) and full content dump (llms-full.txt). |
-| **RAG** | Retrieval-Augmented Generation — the pattern of searching for relevant context before generating a response. LLMkDocs enables RAG over documentation. |
+| **RAG** | Retrieval-Augmented Generation — the pattern of searching for relevant context before generating a response. Anvil enables RAG over documentation. |
 | **Diff-based re-embedding** | Only regenerating embeddings for chunks whose content has changed since the last build. Saves API cost and build time. |
 | **stdio transport** | MCP communication over standard input/output pipes. The simplest transport — agent spawns the MCP server as a child process. |
 | **Cold start problem** | AI agents start every session with zero context. Without documentation access, they either get context copy-pasted (expensive) or guess (unreliable). |
 
 ---
 
-*This design doc is the source of truth for LLMkDocs project architecture. Epic-level details will live in `epics/`. Update this doc when architecture changes.*
+*This design doc is the source of truth for Anvil project architecture. Epic-level details will live in `epics/`. Update this doc when architecture changes.*
