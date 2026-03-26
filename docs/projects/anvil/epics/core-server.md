@@ -123,7 +123,8 @@ CREATE TABLE chunks (
     content TEXT NOT NULL,           -- raw markdown text
     content_hash TEXT NOT NULL,      -- SHA-256 of content (diff-based re-embedding)
     last_modified TEXT,              -- ISO timestamp of source file
-    char_count INTEGER               -- content length
+    char_count INTEGER,              -- content length
+    ordinal INTEGER NOT NULL         -- position within file (0-indexed, document order)
 );
 
 CREATE TABLE anvil_meta (
@@ -149,6 +150,7 @@ The chunker is the most important piece of E1 — chunk quality determines retri
 4. Build breadcrumb from heading hierarchy (e.g., `## Architecture` → `### Data Flow` → breadcrumb: `Architecture > Data Flow`)
 5. Generate deterministic `chunk_id` from `SHA-256(file_path + heading_path)`
 6. Generate `content_hash` from `SHA-256(content)` — used for diff-based re-embedding
+7. Assign `ordinal` (sequential 0-indexed position within the file)
 
 **Long section handling:**
 - If a chunk exceeds `maxChunkSize` (default: 6000 chars, ~1500 tokens), split at paragraph boundaries
@@ -340,6 +342,7 @@ S1 → S2 → S3 → S4 is the critical path. S4 is the integration story that w
 - [ ] Skips empty files (returns empty array)
 - [ ] Preserves GFM features (tables, task lists) in chunk content
 - [ ] Sets `char_count` on each chunk
+- [ ] Sets `ordinal` on each chunk (sequential 0-indexed position within the file, preserving document order)
 - [ ] Unit tests for every behavior using test fixtures
 - [ ] Tests pass against a real CSDLC design doc (copy of our Routr or Anvil design doc)
 
@@ -416,6 +419,7 @@ S1 → S2 → S3 → S4 is the critical path. S4 is the integration story that w
 | 2026-03-29 | DB location defaults to `<docs>/.anvil/index.db` | Hidden dir inside docs dir — self-contained, easy to `.gitignore`, out of the way. DB is a derived artifact, never committed. | Sibling to docs dir (rejected: visible clutter), user home dir (rejected: disconnected from project) |
 | 2026-03-29 | Drop `nav_path` from E1 schema | mkdocs-specific concept. `heading_path` is the universal equivalent. Re-add if mkdocs awareness comes in v2. | Keep nullable column (rejected: dead weight, confusing for non-mkdocs users) |
 | 2026-03-29 | Char-based heuristic for chunk size limits (`maxChunkSize` in chars) | `chars / 4 ≈ tokens` is ~80% accurate, zero dependencies. Adding a real tokenizer (22-53MB) contradicts the lightweight philosophy. Honest naming (`maxChunkSize` not `maxTokens`) avoids confusion. | `gpt-tokenizer` (rejected: 53MB for a heuristic), `js-tiktoken` (rejected: 22MB, still heavy) |
+| 2026-03-29 | Add `ordinal INTEGER` column to chunks schema | E2's `get_page` needs document-order retrieval. Chunker already processes in order — assigning sequential numbers is trivial. SQLite insertion order is not guaranteed. | Derive from heading_path (rejected: fragile for multi-part chunks), rely on insertion order (rejected: not guaranteed by SQLite) |
 | 2026-03-29 | Package as `@claymore/anvil` on npm | `anvil` is taken (dormant since 2018). Scoped package ties into Claymore brand, `npx @claymore/anvil` is clean enough. | `anvil-docs` (generic), `anvil-mcp` (couples to protocol), contact original author (unreliable) |
 | 2026-03-29 | Standalone public repo from day one | No secrets in codebase, free GH Actions, building in public generates early interest. `v0.x` semver covers early roughness. | Private repo (rejected: no reason to stealth a dev tool) |
 

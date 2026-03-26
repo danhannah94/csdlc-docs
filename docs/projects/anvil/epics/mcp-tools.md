@@ -190,9 +190,7 @@ E1's `chunks` table doesn't have an explicit `position` column. Chunks are inser
 2. Derive order from `heading_path` (works for headings but not for multi-part chunks)
 3. Add an `ordinal INTEGER` column — simple sequential number per file
 
-**Recommendation:** Add `ordinal INTEGER` to the chunks table in E1 (minor schema addition). Each chunk gets a sequential number within its file (0, 1, 2, ...). This makes `ORDER BY ordinal` trivial and handles multi-part chunks correctly.
-
-⚠️ **Open question for refinement:** Does this require an E1 schema patch, or should we handle ordering differently?
+**Decision:** `ordinal INTEGER` column added to E1's chunks schema. Each chunk gets a sequential number within its file (0, 1, 2, ...). `ORDER BY ordinal` is trivial and handles multi-part chunks correctly.
 
 ---
 
@@ -471,17 +469,15 @@ S1 is the critical path. S2, S3, S4 are parallelizable after S1 — good candida
 
 ---
 
-## Open Questions
+## Resolved Questions
 
-These need resolution during refinement:
+1. **Chunk ordering (`ordinal` column):** ✅ Add `ordinal INTEGER` to E1's chunks schema. Minor patch — chunker already processes in order, just assign sequential numbers per file. E1 epic doc updated.
 
-1. **Chunk ordering (`ordinal` column):** `get_page` needs to return chunks in document order. E1's schema doesn't have a `position`/`ordinal` column. Do we add one to E1's schema (minor patch) or derive order differently?
+2. **Minimum similarity threshold for `search_docs`:** ✅ No threshold. Return all `top_k` results. Corpus is bounded (user's own docs) — agents judge relevance better than an arbitrary cutoff. Add later if search results prove noisy.
 
-2. **Minimum similarity threshold for `search_docs`:** Return everything and let the agent decide, or apply a floor (e.g., 0.3) to filter noise? Current recommendation: no threshold (return all top_k results).
+3. **`list_pages` heading depth:** ✅ h1/h2 only. Discovery tool, not a full TOC. Agents that need deeper headings use `get_page`. Keeps responses scannable.
 
-3. **`list_pages` heading depth:** Currently spec'd as h1/h2 only. Should agents see deeper headings (h3?) for better discovery, or does that make the response too verbose?
-
-4. **Response size limits:** Should any tool cap response size? `get_page` on a massive doc could return a lot. Current recommendation: no caps in v1.
+4. **Response size limits:** ✅ No caps in v1. Project-scale docs, not encyclopedias. If `get_page` on a massive doc blows a context window, that's user error. Add `max_chunks` param later if needed.
 
 ---
 
@@ -494,6 +490,10 @@ These need resolution during refinement:
 | 2026-03-29 | Exact heading path matching only | Simple, predictable, no ambiguity. Agents discover full paths via `list_pages` or `get_page`. | Partial/leaf matching (rejected: ambiguity when multiple sections share leaf name), fuzzy matching (rejected: v2 complexity) |
 | 2026-03-29 | Raw markdown in responses, no processing | Agents' LLMs handle markdown natively. Formatting carries semantic info (code blocks, tables). Stripping it loses information. | Plain text (rejected: loses structure), HTML (rejected: heavier, agents don't need it) |
 | 2026-03-29 | No pagination | Anvil targets project-scale docs (hundreds of pages, not millions). `top_k` caps search. `list_pages` is bounded by corpus. | Cursor-based pagination (rejected: premature for local tool) |
+| 2026-03-29 | Add `ordinal` column to E1 schema | `get_page` needs document-order retrieval. Deriving order from heading paths is fragile, especially for multi-part chunks. One-line schema change, trivial to populate during chunking. | Derive from heading_path (rejected: fragile), insertion order (rejected: SQLite doesn't guarantee it) |
+| 2026-03-29 | No similarity threshold | Bounded corpus — low-relevance results are still from the user's docs. Agents judge relevance better than arbitrary cutoffs. | Hard threshold at 0.3 (rejected: might hide valid results), configurable threshold (rejected: premature) |
+| 2026-03-29 | `list_pages` shows h1/h2 headings only | Discovery, not full TOC. Keeps responses scannable. Deeper headings available via `get_page`. | Include h3 (rejected: verbose), no headings (rejected: not enough info for discovery) |
+| 2026-03-29 | No response size caps in v1 | Project-scale docs, not encyclopedias. Largest docs are ~50 chunks. | `max_chunks` param (rejected for v1: premature, easy to add later) |
 
 ---
 
