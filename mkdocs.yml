@@ -58,6 +58,8 @@ nav:
         - Nesting: projects/routr/epics/nesting.md
         - Assembly & Joints: projects/routr/epics/assembly-joints.md
         - Validation Pipeline: projects/routr/epics/validation.md
+    - LLMkDocs:
+      - Design: projects/llmkdocs/design.md
 
 markdown_extensions:
   - admonition
