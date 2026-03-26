@@ -70,7 +70,7 @@ No restructuring, no special frontmatter, no format changes. If it's a directory
 
 ### Business Model
 
-**Open-source core (BSD or MIT license).** The CLI, local embeddings, local vector DB, and MCP server are free forever. This is the developer wedge — how people discover Anvil and prove it works.
+**Open-source core (MIT license).** The CLI, local embeddings, local vector DB, and MCP server are free forever. This is the developer wedge — how people discover Anvil and prove it works.
 
 **Monetization tiers (not v1 — informs architecture, not scope):**
 
@@ -605,6 +605,34 @@ Anvil watches a directory path. It doesn't care where the files came from — a 
 - **No per-file access control** — all files in the docs directory are indexed, or none
 - **English-optimized** — embedding models work best with English. Multilingual is possible but untested.
 
+### Scaling Characteristics
+
+Anvil v1 is designed for **project-scale documentation** — tens to hundreds of files. Here's where the architecture hits walls at larger scales:
+
+| Scale | Files | Chunks | First Index | Re-index (1 file) | Query | Status |
+|-------|-------|--------|-------------|-------------------|-------|--------|
+| **Small** (personal project) | 10-50 | 100-500 | ~5-15s | ~200ms | ~10ms | ✅ Sweet spot |
+| **Medium** (team docs) | 50-500 | 500-5,000 | ~30-90s | ~200ms | ~15ms | ✅ Comfortable |
+| **Large** (enterprise docs) | 500-5,000 | 5,000-50,000 | ~5-15 min | ~300ms | ~50ms | ⚠️ First-run is slow, queries still fast |
+| **Massive** (100K+ files) | 100,000+ | 1M+ | Hours | ~500ms | ~200ms+ | 🔴 Needs architectural changes |
+
+**Where it breaks at 100K+ files:**
+
+1. **First-run indexing** — embedding 1M+ chunks with local ONNX on a single machine takes hours. This is a serial CPU bottleneck.
+2. **sqlite-vss search quality** — vector search accuracy degrades at high dimensionality/volume. May need approximate nearest neighbor (ANN) indices or a purpose-built vector DB (pgvector, Pinecone).
+3. **Memory** — loading 1M embeddings (384 dims × 4 bytes × 1M = ~1.5GB) strains a single process.
+4. **File watcher** — chokidar watching 100K files generates significant OS-level overhead. Some OSes have inotify/FSEvents limits.
+5. **Staleness check** — mtime scan of 100K files on every query is no longer ~5ms.
+
+**v2 mitigations (not v1 scope):**
+- Batch/parallel embedding (worker threads or external GPU inference)
+- Sharded sqlite DBs or migration to a scalable vector store
+- Smarter file watching (git-based change detection instead of filesystem events)
+- Incremental staleness checks (bloom filter or checksum file instead of full scan)
+- Cloud-hosted mode (E6) where indexing happens server-side with better hardware
+
+**Bottom line:** v1 is honest about its scale. It's a local, single-process tool for project documentation. If you're indexing a Fortune 500 company's entire knowledge base, you need the hosted tier (v2+). That's actually a *good* monetization forcing function — free works great for small/medium, paid kicks in when you need scale.
+
 ### Tech Debt (Accepted for MVP)
 
 - No caching layer for query results (fine for local, problem at scale)
@@ -661,7 +689,7 @@ graph LR
 | 2026-03-28 | mkdocs plugin, not fork | Maintain less code, leverage existing ecosystem, easier adoption | Full fork (rejected: maintenance burden), standalone tool (rejected: misses mkdocs integration) |
 | 2026-03-28 | sqlite-vss for vector DB | Zero infrastructure, file-based, portable | ChromaDB (heavier, requires server), Pinecone (cloud-only, paid), pgvector (requires Postgres) |
 | 2026-03-28 | Two languages (Python + TypeScript) | Play to each ecosystem's strength | All-Python (immature MCP SDK), All-TypeScript (fighting mkdocs from outside) |
-| 2026-03-28 | Open-source core, BSD license | Maximize adoption, monetize hosted/enterprise later | Closed source (rejected: dev tools need adoption), AGPL (rejected: scares enterprise) |
+| 2026-03-28 | Open-source core, MIT license | Maximize adoption, most recognized license in JS/TS ecosystem, simplest terms. Monetize hosted/enterprise tiers later. | BSD-3 (rejected: less common in JS ecosystem, "no endorsement" clause adds no value), AGPL (rejected: scares enterprise), Apache 2.0 (rejected: patent grants overkill for doc indexing CLI) |
 | 2026-03-28 | Heading-based chunking, not token-window | Preserves semantic coherence of doc sections | Fixed token windows (rejected: splits mid-section), page-level (rejected: too coarse) |
 | 2026-03-28 | Diff-based re-embedding | Only re-embed changed content — saves cost and time | Full re-embed on every build (rejected: wasteful for large sites) |
 | 2026-03-28 | Docs-first, code support deferred to v2 | Docs are structured for humans, easier to chunk well. Code needs AST-aware chunking — different problem. | Code + docs in v1 (rejected: scope creep, different chunking strategies) |

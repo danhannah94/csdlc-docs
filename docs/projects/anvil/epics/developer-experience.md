@@ -317,7 +317,7 @@ Make your docs queryable by AI agents. Zero config, local-first, open source.
 
 ## Contributing
 
-## License (BSD)
+## License (MIT)
 ```
 
 **Key constraint:** The quickstart must get someone from zero to a working MCP query in under 2 minutes. Three commands max:
@@ -494,11 +494,11 @@ S5 is the capstone — it needs the final surface area to document and the polis
 - [ ] README.md written with sections: quickstart, what it does, installation, configuration, MCP client setup (Cursor, Claude Desktop, OpenClaw), CLI reference, architecture overview, contributing, license
 - [ ] Quickstart is ≤ 3 commands to a working MCP query
 - [ ] MCP client config examples are copy-pasteable and tested
-- [ ] `package.json` has: correct `bin` field, `files` whitelist, `keywords`, `description`, `repository`, `license: BSD-3-Clause`
+- [ ] `package.json` has: correct `bin` field, `files` whitelist, `keywords`, `description`, `repository`, `license: MIT`
 - [ ] `npm pack --dry-run` produces clean package with expected files
 - [ ] `.npmignore` or `files` field excludes test fixtures, source maps, etc.
 - [ ] CHANGELOG.md with v0.1.0 entry
-- [ ] LICENSE file (BSD-3-Clause)
+- [ ] LICENSE file (MIT)
 
 **Target files:** Various (error audit), `README.md`, `CHANGELOG.md`, `LICENSE`, `package.json`
 
@@ -517,7 +517,7 @@ S5 is the capstone — it needs the final surface area to document and the polis
 | 2026-03-29 | `anvil index` as separate subcommand | CI/CD use case (validate docs index cleanly), benchmarking, pre-warming. Clean separation: `index` = one-shot, `serve` = long-running. | Combined into serve with `--index-only` (rejected: overloaded flag), no index command (rejected: loses CI use case) |
 | 2026-03-29 | S5 is the capstone (depends on S1-S4) | README needs final surface area. Error audit needs all code paths. Publish prep needs everything in place. | Write README first (rejected: will be outdated by S2-S4 changes), parallel with other stories (rejected: too many moving targets) |
 | 2026-03-29 | Don't actually publish in S5 — prepare only | Human must review the package before it goes public. `npm publish` is a one-line manual step after review. | Auto-publish in CI (rejected: not for v0.1.0 — needs human eyes) |
-| 2026-03-29 | License TBD (MIT vs BSD) | Under discussion. MIT is more common in JS/TS ecosystem, simpler, maximum adoption. BSD-3 adds "no endorsement" clause that doesn't add much value for a dev tool. Leaning MIT. | AGPL (rejected: enterprise-hostile for a dev tool), Apache 2.0 (rejected: overkill — patent grants not needed for doc indexing CLI) |
+| 2026-03-29 | MIT license | Most recognized in JS/TS ecosystem, simplest terms, maximum adoption. Managed service monetization works fine — selling the service, not the code. | BSD-3 (rejected: less common in JS/TS, "no endorsement" clause adds no value), AGPL (rejected: enterprise-hostile), Apache 2.0 (rejected: patent grants overkill) |
 | 2026-03-29 | `anvil index --force` included in v1 | Essential for debugging during active development. Full re-index regardless of content hashes. Low implementation cost — skip the hash comparison in the indexing pipeline. | Defer to v2 (rejected: needed from day one for bug investigation) |
 
 ---
