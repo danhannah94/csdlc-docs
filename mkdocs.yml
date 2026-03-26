@@ -63,6 +63,7 @@ nav:
       - Epics:
         - "E1: Core Server": projects/anvil/epics/core-server.md
         - "E2: MCP Tools": projects/anvil/epics/mcp-tools.md
+        - "E3: Developer Experience": projects/anvil/epics/developer-experience.md
 
 markdown_extensions:
   - admonition
