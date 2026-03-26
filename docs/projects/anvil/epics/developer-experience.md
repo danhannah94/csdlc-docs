@@ -297,6 +297,10 @@ Make your docs queryable by AI agents. Zero config, local-first, open source.
 
 ## What It Does (with diagram)
 
+## Supported Formats
+  - v1: Markdown files on local filesystem
+  - Roadmap: Word, PDF, RST via format adapters
+
 ## Installation
 
 ## Configuration
@@ -513,7 +517,8 @@ S5 is the capstone — it needs the final surface area to document and the polis
 | 2026-03-29 | `anvil index` as separate subcommand | CI/CD use case (validate docs index cleanly), benchmarking, pre-warming. Clean separation: `index` = one-shot, `serve` = long-running. | Combined into serve with `--index-only` (rejected: overloaded flag), no index command (rejected: loses CI use case) |
 | 2026-03-29 | S5 is the capstone (depends on S1-S4) | README needs final surface area. Error audit needs all code paths. Publish prep needs everything in place. | Write README first (rejected: will be outdated by S2-S4 changes), parallel with other stories (rejected: too many moving targets) |
 | 2026-03-29 | Don't actually publish in S5 — prepare only | Human must review the package before it goes public. `npm publish` is a one-line manual step after review. | Auto-publish in CI (rejected: not for v0.1.0 — needs human eyes) |
-| 2026-03-29 | BSD-3-Clause license | Per project design doc. Maximizes adoption, doesn't scare enterprise. | MIT (viable alternative), AGPL (rejected: enterprise-hostile for a dev tool) |
+| 2026-03-29 | License TBD (MIT vs BSD) | Under discussion. MIT is more common in JS/TS ecosystem, simpler, maximum adoption. BSD-3 adds "no endorsement" clause that doesn't add much value for a dev tool. Leaning MIT. | AGPL (rejected: enterprise-hostile for a dev tool), Apache 2.0 (rejected: overkill — patent grants not needed for doc indexing CLI) |
+| 2026-03-29 | `anvil index --force` included in v1 | Essential for debugging during active development. Full re-index regardless of content hashes. Low implementation cost — skip the hash comparison in the indexing pipeline. | Defer to v2 (rejected: needed from day one for bug investigation) |
 
 ---
 

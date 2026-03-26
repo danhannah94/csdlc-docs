@@ -583,9 +583,22 @@ Anvil doesn't manage access control — it inherits whatever access model your d
 | Chunk quality is poor for unusual doc structures | Medium | High (core value prop) | Extensive testing with real-world docs (our CSDLC docs, QuoteAI). Configurable chunking params. |
 | File watcher misses changes (OS-level edge cases) | Low | Low | Staleness check on every query as backup. File watcher is optimization, not sole mechanism. |
 
+### Supported Formats & Hosting (v1)
+
+**v1 supports markdown files (`.md`) on your local filesystem. That's it.**
+
+Anvil watches a directory path. It doesn't care where the files came from — a git repo, Dropbox, a USB drive, or hand-typed on your desktop. If the directory contains `.md` files, Anvil indexes them. There is no "hosting" requirement and no git dependency (git info in `get_status` is optional/opportunistic).
+
+**What's NOT supported in v1:**
+- Word docs (`.docx`), PDFs, RST, HTML, or any non-markdown format
+- Remote file sources (S3, Google Drive, URLs)
+- Archives or compressed files
+
+**v2 (E5: Format Adapters)** will add pluggable format support. The architecture supports this — the chunker and embedder operate on text + structure, not on markdown specifically. A Word adapter would extract text/headings from `.docx`, a PDF adapter would extract from `.pdf`, etc. The pipeline downstream is format-agnostic; only the parser layer is markdown-specific in v1.
+
 ### Known Limitations (v1)
 
-- **Markdown only** — no Word docs, PDFs, or other formats (v2 could add format adapters)
+- **Markdown only** — no Word docs, PDFs, or other formats (v2 adds format adapters via E5)
 - **Local MCP only** — stdio transport, no remote/hosted access
 - **Read-only** — no write tools, agents can't create/update docs via MCP
 - **No branch awareness** — DB reflects whatever files are on disk, no version switching
