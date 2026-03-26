@@ -122,7 +122,6 @@ CREATE TABLE chunks (
     heading_level INTEGER NOT NULL,  -- 1-6
     content TEXT NOT NULL,           -- raw markdown text
     content_hash TEXT NOT NULL,      -- SHA-256 of content (diff-based re-embedding)
-    nav_path TEXT,                   -- reserved for future nav integration
     last_modified TEXT,              -- ISO timestamp of source file
     char_count INTEGER               -- content length
 );
@@ -152,12 +151,12 @@ The chunker is the most important piece of E1 — chunk quality determines retri
 6. Generate `content_hash` from `SHA-256(content)` — used for diff-based re-embedding
 
 **Long section handling:**
-- If a chunk exceeds `maxTokens` (default: 1500), split at paragraph boundaries
+- If a chunk exceeds `maxChunkSize` (default: 6000 chars, ~1500 tokens), split at paragraph boundaries
 - Sub-chunks inherit the heading breadcrumb with a part indicator: `Architecture > Data Flow [part 2/3]`
 - Each sub-chunk gets its own `chunk_id` (hash includes part number)
 
 **Short section handling (configurable):**
-- Sections under `minTokens` (default: 50) can optionally merge upward into parent heading's chunk
+- Sections under `minChunkSize` (default: 200 chars, ~50 tokens) can optionally merge upward into parent heading's chunk
 - Default: merge enabled. Prevents tiny chunks that waste embedding compute.
 
 **Front matter:**
@@ -379,7 +378,7 @@ S1 → S2 → S3 → S4 is the critical path. S4 is the integration story that w
 **Acceptance Criteria:**
 - [ ] CLI entry point: `anvil --docs <path>` starts the server
   - Validates `--docs` path exists, fails fast with clear error if not
-  - Accepts `--db <path>` for custom DB location (default: `<docs>/../anvil.db`)
+  - Accepts `--db <path>` for custom DB location (default: `<docs>/.anvil/index.db`)
   - Minimal arg parsing (no config file support — that's E3)
 - [ ] On startup:
   - If no DB exists: full index with progress reporting to stderr (not stdout — that's MCP stdio)
@@ -413,6 +412,12 @@ S1 → S2 → S3 → S4 is the critical path. S4 is the integration story that w
 | 2026-03-29 | 4 stories, serial dependency chain | Each layer builds on the previous. Storage → Chunker → Embedder → Server is the natural build order. | Parallel stories (rejected: too many cross-dependencies in this epic) |
 | 2026-03-29 | Chunker is a pure function | No side effects — takes string, returns chunks. Makes it testable in isolation and reusable. | Chunker writes directly to DB (rejected: harder to test, couples concerns) |
 | 2026-03-29 | Progress reporting to stderr | stdout is reserved for MCP stdio protocol. Any human-readable output goes to stderr. | Separate log file (rejected: adds complexity), no progress (rejected: bad DX on first run) |
+| 2026-03-29 | Whitespace changes trigger re-embed (defer optimization to v2) | Local ONNX model = no API cost, just CPU cycles. ~200ms for unnecessary re-embed isn't worth optimizing. Hash raw content as-is. | Normalize whitespace before hashing (rejected for v1: premature optimization) |
+| 2026-03-29 | DB location defaults to `<docs>/.anvil/index.db` | Hidden dir inside docs dir — self-contained, easy to `.gitignore`, out of the way. DB is a derived artifact, never committed. | Sibling to docs dir (rejected: visible clutter), user home dir (rejected: disconnected from project) |
+| 2026-03-29 | Drop `nav_path` from E1 schema | mkdocs-specific concept. `heading_path` is the universal equivalent. Re-add if mkdocs awareness comes in v2. | Keep nullable column (rejected: dead weight, confusing for non-mkdocs users) |
+| 2026-03-29 | Char-based heuristic for chunk size limits (`maxChunkSize` in chars) | `chars / 4 ≈ tokens` is ~80% accurate, zero dependencies. Adding a real tokenizer (22-53MB) contradicts the lightweight philosophy. Honest naming (`maxChunkSize` not `maxTokens`) avoids confusion. | `gpt-tokenizer` (rejected: 53MB for a heuristic), `js-tiktoken` (rejected: 22MB, still heavy) |
+| 2026-03-29 | Package as `@claymore/anvil` on npm | `anvil` is taken (dormant since 2018). Scoped package ties into Claymore brand, `npx @claymore/anvil` is clean enough. | `anvil-docs` (generic), `anvil-mcp` (couples to protocol), contact original author (unreliable) |
+| 2026-03-29 | Standalone public repo from day one | No secrets in codebase, free GH Actions, building in public generates early interest. `v0.x` semver covers early roughness. | Private repo (rejected: no reason to stealth a dev tool) |
 
 ---
 
@@ -422,7 +427,7 @@ S1 → S2 → S3 → S4 is the critical path. S4 is the integration story that w
 |-------|----------|-------|
 | Only local ONNX embeddings implemented | Low | Embedder interface should support swapping providers, but only MiniLM is wired up. OpenAI adapter is future work. |
 | No config file support | Low | CLI args only. Config file (`anvil.config.json`) is E3 scope. |
-| No token counting | Low | `char_count` is a rough proxy. Proper tokenizer-aware counting would improve chunk size limits. |
+| Char-based chunk sizing | Low | `chars / 4 ≈ tokens` heuristic. Proper tokenizer deferred to v2 when OpenAI embeddings are added. |
 | Staleness check implementation TBD | Low | Exact mechanism (mtime scan vs. directory hash vs. checksum file) to be determined during implementation. |
 
 ---
