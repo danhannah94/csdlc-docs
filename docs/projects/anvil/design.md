@@ -347,6 +347,7 @@ CREATE VIRTUAL TABLE chunks_vss USING vss0(
 | `get_page` | Retrieve full page content by file path | `file_path: string` | `{ content, metadata, chunks[] }` |
 | `get_section` | Retrieve a specific section by heading path | `file_path: string`, `heading_path: string` | `{ content, metadata }` |
 | `list_pages` | List all pages with nav structure | `prefix?: string` (filter by path prefix) | Array of `{ file_path, nav_path, title, chunk_count }` |
+| `get_status` | Server health, index state, and version info | *(none)* | `{ docs_root, total_pages, total_chunks, embedding_model, last_indexed, db_size_bytes, git_info }` |
 
 ### Explicitly Out of Scope: Write Tools
 
@@ -366,6 +367,7 @@ If write tools are added in the future, they would write to markdown source and 
 | `get_related` | Find pages related to a given page | Based on embedding similarity between page-level vectors |
 | `get_changelog` | What changed since a given date | Git-backed, shows which sections were modified |
 | `search_by_tag` | Filter by frontmatter tags/categories | Requires metadata extraction from frontmatter |
+| `query_metadata` | Search/filter by structured frontmatter fields | Enables QuoteAI-style use cases: "quotes over $3000 from 2024". Moves Anvil toward structured document query engine. |
 
 ### Tool Design Principles
 
@@ -595,6 +597,15 @@ Anvil doesn't manage access control — it inherits whatever access model your d
 - No caching layer for query results (fine for local, problem at scale)
 - Only two embedding providers implemented (local ONNX + OpenAI). Interface exists for more.
 - Markdown-only format support. Format adapter interface not yet abstracted.
+
+---
+
+## Pre-Build Checklist
+
+| Task | Owner | Status | Notes |
+|------|-------|--------|-------|
+| Create `@claymore` npm org | Dan | Not started | Required before first publish. `npx @claymore/anvil` depends on this. |
+| Create standalone public repo | Dan | Not started | GitHub repo for Anvil source code |
 
 ---
 

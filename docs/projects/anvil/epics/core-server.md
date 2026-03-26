@@ -62,6 +62,7 @@ Nothing exists yet. This is a greenfield TypeScript project. The project design 
 
 - **None** — E1 is the first epic. No prior Anvil code exists.
 - **External:** Node.js v18+, npm ecosystem (`@modelcontextprotocol/sdk`, `@huggingface/transformers`, `better-sqlite3`, `sqlite-vss`, `unified`/`remark`, `chokidar`)
+- **Pre-build:** `@claymore` npm org must exist before S1 scaffolds the package (see [project design doc pre-build checklist](../design.md#pre-build-checklist))
 
 ### Dependents
 

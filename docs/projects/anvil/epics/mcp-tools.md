@@ -11,13 +11,14 @@
 
 ### What Is This Epic?
 
-E2 adds the query interface to Anvil — the 4 MCP tools that let AI agents actually retrieve documentation from the indexed vector database. E1 built the engine (watch → chunk → embed → store). E2 adds the steering wheel (search, browse, retrieve).
+E2 adds the query interface to Anvil — the 5 MCP tools that let AI agents actually retrieve documentation from the indexed vector database. E1 built the engine (watch → chunk → embed → store). E2 adds the steering wheel (search, browse, retrieve, diagnose).
 
 By the end of E2, an agent can connect to Anvil via MCP and:
 - Semantically search across all indexed docs
 - Retrieve a full page by path
 - Retrieve a specific section by heading
 - Browse the doc structure to discover what's available
+- Check server health and index state (is it working? is it fresh?)
 
 This is where Anvil becomes *useful*. E1 proves the pipeline works. E2 proves the product works.
 
@@ -27,7 +28,7 @@ After E1, Anvil has a running MCP server with a fully indexed vector database �
 
 ### Goals
 
-- **4 MCP tools** registered and functional: `search_docs`, `get_page`, `get_section`, `list_pages`
+- **5 MCP tools** registered and functional: `search_docs`, `get_page`, `get_section`, `list_pages`, `get_status`
 - **Semantic search** via sqlite-vss vector similarity with relevance scoring
 - **Metadata enrichment** on all responses (file path, heading breadcrumb, last modified, char count)
 - **Query embedding** — embed the agent's search query using the same ONNX model used for indexing
@@ -275,6 +276,57 @@ Lets agents browse the doc structure before querying. The entry point for agents
 
 ---
 
+#### `get_status` — Server Health & Index Info
+
+The diagnostic tool. Agents (and humans debugging) use this to verify Anvil is healthy, indexing correctly, and up-to-date. Also serves as the active development feedback loop — if Anvil has a bug or stale index, this is how you know.
+
+**Parameters:** None.
+
+**Returns:**
+```typescript
+{
+  server: {
+    version: string;            // Anvil version from package.json
+    uptime_seconds: number;     // Time since server started
+    docs_root: string;          // Watched directory path
+  };
+  index: {
+    total_pages: number;        // Files indexed
+    total_chunks: number;       // Chunks in DB
+    last_indexed: string;       // ISO timestamp of last index operation
+    db_path: string;            // Where the DB lives
+    db_size_bytes: number;      // DB file size
+  };
+  embedding: {
+    model: string;              // "all-MiniLM-L6-v2"
+    dimensions: number;         // 384
+    provider: string;           // "local" (or "openai" in future)
+  };
+  git: {
+    head_commit: string | null; // Local HEAD commit hash (short)
+    origin_main: string | null; // origin/main commit hash (short), null if fetch fails
+    dirty: boolean | null;      // Uncommitted changes in docs dir
+  } | null;                     // null if docs dir is not a git repo
+}
+```
+
+**Flow:**
+1. Read `anvil_meta` table for embedding info and last index timestamp
+2. Count distinct `file_path` and total rows in `chunks` table
+3. `fs.stat` the DB file for size
+4. Attempt `git rev-parse HEAD --short` and `git rev-parse origin/main --short` in docs directory
+5. Attempt `git status --porcelain` scoped to docs directory for dirty check
+6. Return assembled status (git fields are null if not a git repo or commands fail)
+
+**Edge Cases:**
+- Docs directory is not a git repo → `git` field is `null` (not an error)
+- `git fetch` not run recently → `origin_main` may be stale (that's fine — it shows what the server *knows*, not what remote *has*)
+- Server just started, no index yet → `last_indexed` is `null`, counts are 0
+
+**Why git info matters:** When an agent is working on a feature branch and docs look stale, `get_status` tells it: "your local HEAD is `abc123` but origin/main is `def456` — you might need to pull." And `dirty: true` means someone edited docs but hasn't committed — the index is fresh (file watcher caught it) but the changes aren't in git yet. This is the kind of situational awareness that makes agents genuinely useful during development.
+
+---
+
 ### Response Design Principles
 
 1. **Always include metadata.** Agents need to cite sources, follow up on specific sections, and assess relevance. Every response includes `file_path`, `heading_path`, and `last_modified`.
@@ -355,6 +407,22 @@ Reuses E1's test fixtures (already indexed) plus:
 | `nested-headings.md` | Deep heading hierarchy — `get_section` with full breadcrumb path | 🔴 High |
 | `multi-part-section.md` | Long section split into parts — `get_section` concatenates correctly | 🔴 High |
 
+### Dogfood Test: Real CSDLC Docs
+
+In addition to synthetic fixtures, E2 includes integration tests against a snapshot of our own documentation. This is the ultimate validation — if Anvil can't find the right sections in the docs we wrote, something is fundamentally wrong.
+
+**Fixture:** A copy (not symlink) of the Anvil project design doc, frozen at test-write time. Stored as `test/fixtures/real-docs/anvil-design.md`.
+
+**Assertions:**
+- `search_docs("heading-based chunking")` → top result contains the Chunking Strategy section
+- `search_docs("sqlite vector database")` → top result contains the Tech Stack section
+- `get_page("anvil-design.md")` → returns all sections in document order, total chunks matches expected count
+- `get_section("anvil-design.md", "Competitive Landscape > Why We're Still Building This")` → returns the correct section content
+- `list_pages()` → includes `anvil-design.md` with correct title and chunk count
+- `get_status()` → `total_pages >= 1`, `total_chunks > 0`, `embedding.model` is `all-MiniLM-L6-v2`
+
+This is meta, but it's the best possible integration test — we know the content, we know what queries should return, and it validates the full pipeline from chunking through retrieval.
+
 ### Verification Rules
 
 1. `search_docs` with a query that matches a single unique chunk → that chunk is result #1
@@ -366,7 +434,10 @@ Reuses E1's test fixtures (already indexed) plus:
 7. `list_pages` returns all indexed files with correct metadata
 8. `list_pages` with prefix filter → only matching paths
 9. All tools return metadata (file_path, heading_path, last_modified)
-10. All tools trigger staleness check (verify by modifying a file between index and query)
+10. All query tools trigger staleness check (verify by modifying a file between index and query)
+11. `get_status` returns correct page/chunk counts matching actual DB state
+12. `get_status` returns git info when docs dir is a git repo, null when it's not
+13. Dogfood tests against real CSDLC docs pass (search returns expected sections)
 
 ---
 
@@ -380,6 +451,7 @@ Stories are ordered by dependency. S1 builds the query infrastructure, S2-S4 imp
 | **S2** | `get_page` tool | Small | S1 (query layer, response types) | Not started |
 | **S3** | `get_section` tool | Small | S1 (query layer, response types) | Not started |
 | **S4** | `list_pages` tool | Small | S1 (query layer, response types) | Not started |
+| **S5** | `get_status` tool | Small | S1 (query layer, response types) | Not started |
 
 ### Dependency Graph
 
@@ -389,9 +461,10 @@ graph LR
     S1 --> S2["S2: get_page"]
     S1 --> S3["S3: get_section"]
     S1 --> S4["S4: list_pages"]
+    S1 --> S5["S5: get_status"]
 ```
 
-S1 is the critical path. S2, S3, S4 are parallelizable after S1 — good candidates for sub-agent worktrees.
+S1 is the critical path. S2-S5 are parallelizable after S1 — good candidates for sub-agent worktrees.
 
 ### S1: Query Infrastructure + `search_docs`
 
@@ -467,6 +540,27 @@ S1 is the critical path. S2, S3, S4 are parallelizable after S1 — good candida
 
 **Target files:** `src/tools/list-pages.ts`
 
+### S5: `get_status` Tool
+
+**What:** Register `get_status` MCP tool. Returns server health, index state, embedding config, and git info for the docs directory.
+
+**Acceptance Criteria:**
+- [ ] `get_status` MCP tool registered and functional
+- [ ] No parameters
+- [ ] Returns server info: version (from `package.json`), uptime, docs root path
+- [ ] Returns index info: total pages, total chunks, last indexed timestamp, DB path, DB file size
+- [ ] Returns embedding info: model name, dimensions, provider (from `anvil_meta`)
+- [ ] Returns git info (if docs dir is a git repo):
+  - Local HEAD commit hash (short)
+  - `origin/main` commit hash (short), null if fetch fails
+  - `dirty` boolean (uncommitted changes in docs dir)
+- [ ] Git info is `null` (not an error) if docs dir is not a git repo
+- [ ] Git commands fail gracefully — never crashes the tool
+- [ ] Unit test: mock DB + mock git → verify response shape
+- [ ] Integration test: index fixtures in a git repo → `get_status` → verify counts and git info
+
+**Target files:** `src/tools/get-status.ts`
+
 ---
 
 ## Resolved Questions
@@ -494,6 +588,10 @@ S1 is the critical path. S2, S3, S4 are parallelizable after S1 — good candida
 | 2026-03-29 | No similarity threshold | Bounded corpus — low-relevance results are still from the user's docs. Agents judge relevance better than arbitrary cutoffs. | Hard threshold at 0.3 (rejected: might hide valid results), configurable threshold (rejected: premature) |
 | 2026-03-29 | `list_pages` shows h1/h2 headings only | Discovery, not full TOC. Keeps responses scannable. Deeper headings available via `get_page`. | Include h3 (rejected: verbose), no headings (rejected: not enough info for discovery) |
 | 2026-03-29 | No response size caps in v1 | Project-scale docs, not encyclopedias. Largest docs are ~50 chunks. | `max_chunks` param (rejected for v1: premature, easy to add later) |
+| 2026-03-29 | Add `get_status` as 5th MCP tool | Active development feedback loop — agents and humans need to know if Anvil is healthy, indexing correctly, and up-to-date. Zero-parameter, reads existing `anvil_meta` table. Includes git commit hashes for docs-vs-remote drift detection. | No health tool (rejected: no way to diagnose issues), separate CLI command (rejected: agents can't call CLI commands) |
+| 2026-03-29 | Include git info (HEAD, origin/main, dirty) in `get_status` | Agents need drift detection: "am I on the right branch? is my index stale vs remote? are there uncommitted doc changes?" Critical for multi-developer workflows. | No git info (rejected: loses valuable development context), full git log (rejected: too much data) |
+| 2026-03-29 | Dogfood test against real CSDLC docs | Best possible integration test — we wrote the content, we know what queries should return. Validates full pipeline. Frozen snapshot avoids test fragility. | Synthetic fixtures only (rejected: misses real-world chunking/retrieval quality issues) |
+| 2026-03-29 | Frontmatter/metadata filtering deferred to v2 | QuoteAI use case (structured quote data as markdown with frontmatter) would benefit from metadata queries, but it's a scope expansion from "document search" to "structured document query engine." Semantic search gets 80% there for v1. | Add `query_metadata` tool (rejected for v1: scope creep, different retrieval pattern) |
 
 ---
 
