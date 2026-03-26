@@ -123,7 +123,7 @@ graph TB
         B -->|1. Parse headings| C[Chunker]
         C -->|2. Generate embeddings| D[Embedding Provider]
         D -->|3. Upsert| E[(sqlite-vss DB)]
-        B -->|4. Generate| F[llms.txt / llms-full.txt]
+        B -.->|v2| F[llms.txt / llms-full.txt]
     end
 
     subgraph "Runtime (TypeScript)"
@@ -312,7 +312,7 @@ MCP search returns 500-1,000 targeted tokens per query. That's the difference �
 
 ### MVP Scope Decision
 
-llms.txt generation is a **nice-to-have for v1, not a blocker.** The core value prop is MCP search. llms.txt may be deferred to a fast-follow if the MVP timeline is tight. It shares the chunker's content extraction, so the incremental work is modest — but it's a separate code path and output format.
+**Deferred to v2.** llms.txt generation is not included in the v1 MVP. The core value prop is MCP semantic search — llms.txt serves a different audience (non-MCP clients) that we're not targeting yet. When we're ready to share LLMkDocs with the broader community, llms.txt becomes a valuable adoption tool. For now, it's overhead.
 
 ---
 
@@ -405,6 +405,34 @@ When you edit docs and rebuild, the DB updates in place. The MCP server reads th
 
 **For team use (GMPPU): Option 2 or 3.** Team members pull and build, or CI builds the DB for them. v2 would add hosted DB for zero-sync team access.
 
+### Staleness Detection
+
+A real risk: the DB gets out of sync with the docs because someone forgot to rebuild after editing. LLMkDocs handles this with **two safeguards:**
+
+**1. Git hook (automatic rebuild on pull)**
+A `post-merge` git hook in the docs repo auto-runs `mkdocs build` whenever you `git pull`. You can't forget because it happens automatically.
+
+```bash
+# .git/hooks/post-merge
+#!/bin/sh
+mkdocs build --quiet
+```
+
+**2. DB freshness check (runtime warning)**
+The MCP server stores a `build_timestamp` and `source_git_commit` in the DB metadata table. On each query, it can compare against the current git state of the docs directory. If the DB is stale (docs have changed since the last build), the MCP server returns a warning alongside results:
+
+```json
+{
+  "warning": "Docs DB is 3 commits behind source. Run `mkdocs build` to update.",
+  "results": [ ... ]
+}
+```
+
+The agent can then auto-rebuild before continuing, or surface the warning to the human.
+
+**3. Session start ritual**
+In CSDLC workflows, the AI Lead's standup checklist (AGENTS.md) includes "check docs DB freshness" as a boot step. If stale, rebuild before proceeding. This is the human-process layer backing up the automated layer.
+
 ### Branch Handling
 
 **v1: The DB reflects whatever branch you build.** Run `mkdocs build` on `main`, you get main's DB. Run it on a feature branch, you get that branch's DB. The DB is just a build artifact — it has no branch awareness.
@@ -473,6 +501,7 @@ LLMkDocs doesn't manage access control — it inherits whatever access model you
 | **Two-language split** | Python plugin + TypeScript MCP server adds complexity. Shared contract is the DB schema. | Build system, MCP server, testing |
 | **sqlite-vss portability** | C extension — needs to compile on target platform. May be friction on some systems. | Installation, CI |
 | **First build model download** | Default local model is ~80MB. First build takes longer (download + cache). Subsequent builds are fast. | DX, CI caching |
+| **DB staleness** | If docs change but the DB isn't rebuilt, agents query stale content. Mitigated by git hooks, runtime freshness checks, and session start rituals. | MCP Server, Deployment, AGENTS.md |
 
 ---
 
@@ -513,7 +542,7 @@ LLMkDocs doesn't manage access control — it inherits whatever access model you
 | E1: Core Plugin & Chunker | [link](epics/core-plugin.md) | Not started | mkdocs plugin skeleton, heading-based chunker, sqlite-vss writer |
 | E2: Embedding Pipeline | [link](epics/embedding-pipeline.md) | Not started | Provider abstraction, local model (default), OpenAI (optional), diff-based re-embedding |
 | E3: MCP Server | [link](epics/mcp-server.md) | Not started | TypeScript MCP server, 4 tools, stdio transport |
-| E4: llms.txt Generation | [link](epics/llms-txt.md) | Not started | Auto-generate llms.txt and llms-full.txt — **may defer from MVP** |
+| E4: llms.txt Generation | [link](epics/llms-txt.md) | **Deferred to v2** | Auto-generate llms.txt and llms-full.txt — not needed for v1 (MCP is the primary interface) |
 | E5: Developer Experience | [link](epics/developer-experience.md) | Not started | CLI commands, status output, error messages, README, quickstart |
 
 ### Dependency Graph
@@ -529,10 +558,10 @@ graph LR
 
 - **E1 → E2** is serial (need chunks before you can embed them)
 - **E2 → E3** is serial (need a populated DB before MCP server can query it)
-- **E4** is optional/deferrable — can run parallel with E2/E3 if included
+- **E4** is deferred to v2 (llms.txt not needed for v1)
 - **E5** is last (polishes the entire pipeline)
 
-**MVP critical path:** E1 → E2 → E3 → E5 (4 epics, mostly serial)
+**MVP critical path:** E1 → E2 → E3 → E5 (4 epics, serial)
 
 ---
 
@@ -552,6 +581,9 @@ graph LR
 | 2026-03-28 | Read-only MCP server, no write tools | Clean security model, agents already have filesystem access for writing | Read-write MCP (rejected: scope creep, different product — a docs CMS) |
 | 2026-03-28 | Local-first deployment for v1 | Simplest model — build locally, DB is a file, MCP server reads it | Cloud-hosted DB (rejected for v1: premature infrastructure) |
 | 2026-03-28 | v1 has no branch awareness | DB reflects whatever branch is built. Versioned DBs deferred to v2. | Multi-branch support (rejected: complexity not justified for solo/small team use) |
+| 2026-03-28 | Defer llms.txt to v2 | v1 targets MCP-capable clients (OpenClaw, Cursor, Claude Desktop). llms.txt serves non-MCP clients we're not targeting yet. | Include in v1 (rejected: extra code path, no immediate consumer) |
+| 2026-03-28 | No MCP write tools | Agents already have filesystem access for writing docs. MCP write adds indirection without capability. Read-only is cleaner. | Read-write MCP (rejected: moot for local agents, scope creep toward docs CMS) |
+| 2026-03-28 | Staleness detection (git hook + runtime check) | Forgetting to rebuild is a real risk. Git hooks automate it, runtime checks catch edge cases. | Manual rebuild only (rejected: humans forget), auto-rebuild on query (rejected: too magical, unexpected build times) |
 
 ---
 
