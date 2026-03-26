@@ -10,13 +10,15 @@
 
 ### What Is This?
 
-LLMkDocs is an open-source mkdocs plugin that makes documentation queryable by AI agents. When you build your docs, LLMkDocs automatically chunks your markdown by heading hierarchy, generates embeddings, and stores them in a local vector database. It then exposes that database through an MCP server so any LLM client can semantically search your docs on demand — no copy-pasting context, no llms.txt concatenation, no manual curation.
+LLMkDocs is an open-source MCP server that makes any document collection queryable by AI agents. Point it at a directory of markdown files (or any supported format), and it automatically chunks your content by structure, generates embeddings using a local model, and stores them in a local vector database. Agents connect via MCP and semantically search your docs on demand — no copy-pasting context, no manual curation, no external services required.
 
-Write markdown → build → agents can query it. That's the entire promise.
+Point it at your docs → agents can query them. That's the entire promise.
+
+While the name evokes mkdocs (and it works beautifully alongside mkdocs projects), **LLMkDocs is not coupled to mkdocs.** It's a standalone tool that works with any directory of documents. Technical docs, manuscripts, knowledge bases, legal libraries — if it's text in files, LLMkDocs can index it.
 
 ### Why This Exists — The Dual-Audience Problem
 
-Documentation has always served one audience: humans. MkDocs, Sphinx, Docusaurus — they're all optimized for human consumption. Beautiful formatting, searchable web pages, nice navigation. And they're great at it.
+Written content has always served one audience: humans. Documentation sites, manuscripts, knowledge bases — they're all optimized for human consumption. Beautiful formatting, searchable web pages, nice navigation. And they're great at it.
 
 But now there's a second audience: **AI agents.** And their needs are fundamentally different from humans.
 
@@ -40,34 +42,47 @@ In the context of [CSDLC](../../methodology/process.md), this transforms **Step 
 
 ### Who Is It For?
 
-**Primary:** Development teams using mkdocs who work with AI agents (coding assistants, CI/CD agents, internal chatbots). Their pain point: agents need documentation context but current options are either "paste the whole doc" (token-expensive, noisy) or "hope the agent figures it out" (unreliable).
+**v1 — Developers & technical teams:** Teams working with AI agents who need their documentation queryable. Pain point: agents need documentation context but current options are either "paste the whole doc" (token-expensive, noisy) or "hope the agent figures it out" (unreliable). These users are comfortable with CLI tools, understand MCP, and have markdown docs.
 
-**Secondary:** Anyone publishing technical documentation who wants LLM-ready access — open-source projects, internal knowledge bases, API documentation.
+**v2+ — Anyone with a document corpus and an AI workflow:**
 
-**Tertiary (future):** Non-mkdocs documentation platforms. The architecture is designed so the chunking/embedding/MCP layers are independent of mkdocs, but v1 is mkdocs-only.
+| Audience | Use Case | Example |
+|----------|----------|---------|
+| **Authors & writers** | AI assistant that knows your entire body of work — characters, plot threads, continuity, world-building | A mystery author with 10+ books needs an AI that can answer "what color eyes did I give this character in book 3?" |
+| **Legal teams** | Semantic search across contract libraries, case law, policy documents | "Find all precedents related to force majeure clauses" |
+| **Enterprise** | Internal knowledge bases, SOPs, runbooks queryable by AI assistants | New hire's AI assistant can query the entire company knowledge base |
+| **Research** | Paper libraries, lab notebooks, literature reviews | "What methods have been used for X in the last 5 papers?" |
+| **Education** | Course materials and textbooks as AI-queryable resources | Students' AI tutors can pull relevant course content on demand |
+
+The broader vision informs architecture decisions (format-agnostic, not hardcoded to markdown) but **v1 scope is developers with markdown docs.**
 
 ### Bootstrapping with Existing Projects
 
-LLMkDocs is designed to drop into any existing mkdocs project with zero migration:
+LLMkDocs is designed to drop into any existing project with zero migration:
 
-1. `pip install llmkdocs`
-2. Add the plugin to `mkdocs.yml` (3-5 lines of config)
-3. `mkdocs build`
-4. Vector DB is generated. Point the MCP server at it. Done.
+1. `npm install -g llmkdocs` (or `npx llmkdocs`)
+2. `llmkdocs --docs ./docs/`
+3. MCP server starts, indexes your docs on first run, and is ready for agent queries.
 
-No restructuring, no special frontmatter, no markdown format changes. If mkdocs can build it, LLMkDocs can index it. This applies to existing projects like our Routr CSDLC docs, internal documentation at work, or any mkdocs site.
+No restructuring, no special frontmatter, no format changes. If it's a directory of text files, LLMkDocs can index it. This applies to existing projects like our Routr CSDLC docs, internal documentation at work, or any markdown-based project.
+
+**First-run experience:** The initial indexing (30-60 seconds for a large corpus) happens once on first startup. The MCP server shows progress and becomes available for queries as soon as indexing completes. Every subsequent startup is near-instant (loads existing DB, checks for changes).
 
 ### Business Model
 
-**Open-source core (BSD or MIT license).** The plugin, local vector DB, and MCP server are free forever.
+**Open-source core (BSD or MIT license).** The CLI, local embeddings, local vector DB, and MCP server are free forever. This is the developer wedge — how people discover LLMkDocs and prove it works.
 
-**Future monetization options (not v1):**
-- **Hosted vector DB** — managed cloud storage so teams don't run local infra
-- **Analytics dashboard** — "which docs do agents query most?", "which sections have low retrieval quality?" — helps teams improve their docs
-- **Enterprise embedding providers** — plug into Bedrock, Azure OpenAI, private models
-- **Team features** — shared vector DBs, access control, audit logs
+**Monetization tiers (not v1 — informs architecture, not scope):**
 
-Monetization is deferred. The goal for v1 is adoption and validation.
+| Tier | What | Who Pays | Why They Pay |
+|------|------|----------|-------------|
+| **Open-source CLI** | `npx llmkdocs --docs ./path` — local everything, stdio MCP | Free forever | Adoption, community, developer trust |
+| **Cloud sync** | DB auto-syncs to cloud. MCP accessible from anywhere. Team sharing. | Teams, small companies | Collaboration — multiple people/agents query the same docs |
+| **Managed service** | Upload docs via web UI, get an MCP endpoint. No CLI needed. | Non-technical users (authors, legal, enterprise) | They want the value without the terminal |
+| **Analytics** | "Which docs do agents query most?" "Which sections have low retrieval quality?" | Anyone optimizing docs for AI | Data-driven doc improvement |
+| **Custom embeddings** | Fine-tuned models for specific domains (legal, medical, etc.) | Enterprise, specialized verticals | Domain-specific accuracy |
+
+**v1 is free, open-source, local-only.** The goal is adoption and validation. Revenue comes after product-market fit.
 
 ---
 
@@ -75,40 +90,51 @@ Monetization is deferred. The goal for v1 is adoption and validation.
 
 | Layer | Technology | Rationale |
 |-------|-----------|-----------|
-| Plugin Host | mkdocs (Python) | Existing ecosystem, hook-based plugin API, widely adopted |
-| Chunking | Custom (Python) | Heading-hierarchy-aware splitting — no off-the-shelf chunker does this well for markdown |
-| Embeddings (default) | `all-MiniLM-L6-v2` via sentence-transformers | **Zero API keys required.** 80MB local model, runs in CI, good quality for bounded-corpus retrieval. |
+| Runtime | Node.js (TypeScript) | Single language for the entire product. MCP ecosystem is TS-first. |
+| Markdown Parsing | `unified` / `remark` | Mature markdown AST parser — heading extraction, structure awareness |
+| Chunking | Custom (TypeScript) | Heading-hierarchy-aware splitting — no off-the-shelf chunker does this well |
+| Embeddings (default) | `all-MiniLM-L6-v2` via `@huggingface/transformers` (ONNX) | **Zero API keys required.** Local ONNX model, ~80MB, runs anywhere Node.js runs. |
 | Embeddings (optional) | OpenAI `text-embedding-3-small` | Higher quality, requires API key. Configurable upgrade path. |
-| Vector DB | sqlite-vss | Zero infrastructure — it's a SQLite extension. Ships as a file. No server process needed. |
-| MCP Server | MCP SDK (TypeScript) | Standard MCP protocol, stdio transport for v1. TypeScript because the MCP ecosystem is TS-first. |
+| Vector DB | sqlite-vss via `better-sqlite3` | Zero infrastructure — SQLite extension. DB is a single file. |
+| MCP Protocol | `@modelcontextprotocol/sdk` | Standard MCP, stdio transport for v1. |
+| File Watching | `chokidar` (or Node.js `fs.watch`) | Detects doc changes for auto-re-indexing |
 
 ### Key Libraries & Dependencies
 
 | Library | Purpose | Notes |
 |---------|---------|-------|
-| `mkdocs` plugin API | Hook into build lifecycle | `on_page_markdown`, `on_post_build` events |
-| `sqlite-vss` | Vector similarity search | SQLite extension — `pip install sqlite-vss` |
-| `sentence-transformers` | Local embedding generation | Default provider — no API key needed |
-| `openai` (Python) | Optional cloud embeddings | Configurable upgrade for higher quality |
-| `@modelcontextprotocol/sdk` | MCP server implementation | TypeScript, stdio transport |
-| `better-sqlite3` | MCP server reads sqlite-vss DB | Node.js SQLite driver with extension loading |
+| `@modelcontextprotocol/sdk` | MCP server implementation | stdio transport, tool registration |
+| `@huggingface/transformers` | Local ONNX embedding inference | Runs `all-MiniLM-L6-v2` without Python |
+| `better-sqlite3` | SQLite driver with extension loading | Reads/writes sqlite-vss DB |
+| `sqlite-vss` | Vector similarity search | Native SQLite extension |
+| `unified` / `remark` | Markdown parsing | AST-level heading extraction and content splitting |
+| `chokidar` | File system watching | Triggers re-indexing on doc changes |
+
+### Architecture Decision: All TypeScript, Single Process
+
+The entire product — file watching, chunking, embedding, vector storage, and MCP serving — runs in a single Node.js process. No Python dependency, no multi-process coordination, no shared file contracts.
+
+**Why this works now:** `@huggingface/transformers` runs ONNX-optimized models directly in Node.js. The same `all-MiniLM-L6-v2` model that previously required Python + PyTorch now runs natively in JavaScript with comparable performance. This eliminates the two-language split entirely.
+
+**Previous approach (rejected):** Python mkdocs plugin for chunking/embedding + TypeScript MCP server. Rejected because: two languages, two install steps, shared state via DB file was fragile, and decoupling from mkdocs made the plugin unnecessary.
 
 ### Architecture Decision: Local-First Embeddings
 
-The default embedding model runs locally — no API key, no network calls, no cost per build. This is a deliberate choice:
+The default embedding model runs locally — no API key, no network calls, no cost per query. This is a deliberate choice:
 
-- **Zero friction adoption:** `pip install llmkdocs` and you're done. No OpenAI account, no API key management, no billing surprises.
-- **CI-native:** The 80MB model downloads once and caches. GitHub Actions, GitLab CI, any CI system can run it without secrets.
+- **Zero friction adoption:** `npx llmkdocs --docs ./path` and you're done. No OpenAI account, no API key management, no billing surprises.
 - **Good enough for docs:** You're searching within a bounded corpus (your own docs), not the entire internet. The quality difference between MiniLM and OpenAI embeddings matters less when the search space is small and well-structured.
 - **Upgrade path exists:** Users who want higher quality can switch to OpenAI (or Bedrock, or any provider) with one config line.
 
-### Architecture Decision: Two Languages
+### Architecture Decision: Self-Managing MCP Server
 
-The plugin is Python (because mkdocs is Python). The MCP server is TypeScript (because the MCP SDK ecosystem is TypeScript-first and most MCP clients expect Node.js processes). They communicate through the sqlite-vss database file — it's the shared contract.
+The MCP server is not a passive query layer — it **owns the entire indexing pipeline.** On startup, it indexes the docs directory. While running, it watches for file changes and re-indexes automatically. Agents always get fresh results without manual rebuilds or external tooling.
 
-**Alternative considered:** All-Python (use a Python MCP SDK). Rejected because the Python MCP ecosystem is immature, and agents/clients (Cursor, Claude Desktop, OpenClaw) predominantly speak to TypeScript MCP servers.
-
-**Alternative considered:** All-TypeScript (rewrite the mkdocs integration). Rejected because fighting the mkdocs plugin system from outside Python would be painful and fragile.
+This means:
+- No separate build step (no `mkdocs build` dependency for the DB)
+- No CI pipeline needed for the vector DB
+- No git hooks or manual rebuild rituals
+- The MCP server IS the product — one process does everything
 
 ---
 
@@ -118,70 +144,90 @@ The plugin is Python (because mkdocs is Python). The MCP server is TypeScript (b
 
 ```mermaid
 graph TB
-    subgraph "Build Time (Python)"
-        A[Markdown Files] -->|mkdocs build| B[LLMkDocs Plugin]
-        B -->|1. Parse headings| C[Chunker]
-        C -->|2. Generate embeddings| D[Embedding Provider]
-        D -->|3. Upsert| E[(sqlite-vss DB)]
-        B -.->|v2| F[llms.txt / llms-full.txt]
+    subgraph "LLMkDocs MCP Server (single Node.js process)"
+        A[File Watcher] -->|detect changes| B[Chunker]
+        B -->|heading-based splits| C[Embedder — local ONNX model]
+        C -->|upsert| D[(sqlite-vss DB)]
+        E[MCP Tool Handler] -->|staleness check| A
+        E -->|vector search| D
     end
 
-    subgraph "Runtime (TypeScript)"
-        G[MCP Server] -->|reads| E
-        H[AI Agent / LLM Client] -->|MCP protocol| G
-    end
+    F[AI Agent] -->|MCP protocol / stdio| E
+    G[Docs Directory] --> A
 
-    subgraph "Existing (unchanged)"
-        B -->|normal build| I[Static Site]
-        I -->|deploy| J[GitHub Pages / Hosting]
+    subgraph "Existing (unchanged, optional)"
+        H[mkdocs build] -->|static HTML| I[GitHub Pages]
+        G --> H
     end
 ```
 
 ### Layer Descriptions
 
-**Chunker (build-time, Python)**
-Parses markdown into semantically meaningful chunks based on heading hierarchy. Each chunk carries metadata: source file path, heading breadcrumb (e.g., `Architecture > Data Flow > Event System`), heading level, position in document, and last-modified timestamp. Chunks are the atomic unit — one chunk = one retrievable piece of context.
+**File Watcher**
+Monitors the docs directory for changes (new files, edits, deletions). On startup, performs a full scan to detect any changes since the last index. While running, uses filesystem events for near-instant change detection.
 
-**Embedding Provider (build-time, Python)**
-Takes chunks and generates vector embeddings. Abstracted behind an interface so providers are swappable. Default: `all-MiniLM-L6-v2` (local, no API key). Optional: OpenAI, Bedrock, or any provider that implements the interface.
+**Chunker**
+Parses markdown into semantically meaningful chunks based on heading hierarchy using `remark` (markdown AST parser). Each chunk carries metadata: source file path, heading breadcrumb (e.g., `Architecture > Data Flow > Event System`), heading level, position in document, and last-modified timestamp. Chunks are the atomic unit — one chunk = one retrievable piece of context.
 
-**Vector DB (shared, file-based)**
-sqlite-vss database file. Contains the chunks table (text, metadata, embedding vector) and the VSS index. This file is the contract between the Python build step and the TypeScript MCP server. It can be committed to a repo, stored as a CI artifact, or synced via any file mechanism.
+**Embedder**
+Takes chunks and generates vector embeddings. Default: `all-MiniLM-L6-v2` via ONNX runtime (local, no API key, ~80MB model). Abstracted behind an interface — OpenAI, Bedrock, or any provider can be swapped in via config.
 
-**MCP Server (runtime, TypeScript)**
-Lightweight process that loads the sqlite-vss DB and exposes MCP tools. Agents connect via stdio. The server is **read-only** — it cannot modify the DB, the docs, or anything else.
+**Vector DB**
+sqlite-vss database file. Contains the chunks table (text, metadata, embedding vector) and the VSS index. Fully managed by the MCP server — no external process reads or writes it.
 
-**llms.txt Generator (build-time, Python)**
-Produces `llms.txt` (structured site map with page titles, paths, and one-line descriptions) and `llms-full.txt` (full concatenated content of all pages). These are **fallback formats** for LLM clients that don't support MCP — they provide basic docs access without semantic search. See [llms.txt section](#llmstxt--llms-fulltxt) for details.
+**MCP Tool Handler**
+Receives agent queries via MCP protocol (stdio transport). Before each query, checks if the docs source has changed. If stale, triggers a targeted re-index (only changed files) before returning results. Agents always get fresh data without knowing or caring about the indexing layer.
 
 ### Data Flow
 
-#### Build-Time: Indexing Documentation
+#### Startup: First-Run Indexing
+
+```
+User runs: npx llmkdocs --docs ./docs/
+    → MCP server starts
+    → Scans docs directory — no existing DB or DB is empty
+    → Chunks ALL files by heading hierarchy
+    → Generates embeddings for all chunks (local ONNX model)
+    → Writes sqlite-vss DB
+    → MCP server is ready for queries
+    → ~30-60 seconds for a large corpus (1,000 chunks), near-instant for small projects
+```
+
+#### Steady State: Incremental Re-Indexing
 
 ```
 Author edits docs/architecture.md
-    → mkdocs build triggers
-    → Plugin re-chunks ALL files (cheap — just string splitting)
+    → File watcher detects the change (or staleness check on next query)
+    → Re-chunks only the changed file
     → Compares chunk content_hash against existing DB entries
-    → Only re-embeds chunks whose content actually changed (expensive — API/model call)
-    → sqlite-vss DB updated via upsert (new/changed chunks inserted, unchanged chunks kept)
-    → Stale chunks pruned (chunks from deleted pages/sections removed)
-    → llms.txt regenerated
-    → Site builds normally to static HTML
+    → Only re-embeds chunks whose content actually changed
+    → sqlite-vss DB updated via upsert (changed chunks updated, deleted chunks pruned)
+    → Next agent query gets fresh results
+    → ~200-400ms for a typical single-page edit
 ```
 
-**Cost implication:** A 200-page docs site might have 1,000 chunks. Editing one page affects ~5 chunks. With diff-based re-embedding, only those 5 chunks get re-embedded — not all 1,000. With the local model (default), this is free. With OpenAI, it's the difference between $0.0001 and $0.02 per build.
-
-#### Runtime: Agent Queries Docs
+#### Agent Query
 
 ```
 Agent needs context about "data flow"
     → Agent calls MCP tool: search_docs("data flow architecture")
-    → MCP server runs vector similarity search against sqlite-vss
+    → MCP server checks for doc changes (fast hash/mtime check, ~5ms)
+    → If stale: triggers incremental re-index first (~200-400ms one time)
+    → Runs vector similarity search against sqlite-vss
     → Returns top-k chunks with metadata and relevance scores
     → Agent gets exactly the context it needs (~500-1000 tokens)
     → vs. old way: human pastes entire doc (~15,000-20,000 tokens)
 ```
+
+#### Latency Profile
+
+| Scenario | Added Latency | Frequency |
+|----------|--------------|-----------|
+| Normal query (DB is fresh) | ~5ms (staleness check only) | 95%+ of queries |
+| Small edit (1 page, ~5 chunks) | ~200-400ms (re-index + query) | Occasional, once per edit |
+| New doc added (~10 chunks) | ~400-800ms | Rare |
+| Major restructure (50+ chunks) | ~2-4 seconds | Very rare |
+| First-ever full index (1,000 chunks) | ~30-60 seconds | Once, on first startup |
 
 ---
 
@@ -234,7 +280,7 @@ CREATE TABLE llmkdocs_meta (
     key TEXT PRIMARY KEY,
     value TEXT
 );
--- Stores: embedding_model, embedding_dimensions, build_timestamp, mkdocs_version, llmkdocs_version
+-- Stores: embedding_model, embedding_dimensions, last_index_timestamp, llmkdocs_version, docs_root_path
 
 -- sqlite-vss virtual table for vector search
 CREATE VIRTUAL TABLE chunks_vss USING vss0(
@@ -318,48 +364,60 @@ MCP search returns 500-1,000 targeted tokens per query. That's the difference �
 
 ## Configuration
 
-### mkdocs.yml Integration
+### CLI Usage
 
-```yaml
-plugins:
-  - llmkdocs:
-      # Embedding provider (default: local model, no API key needed)
-      embedding_provider: local           # local | openai | bedrock
-      # embedding_model: text-embedding-3-small  # only needed for non-local providers
-      # embedding_api_key_env: OPENAI_API_KEY     # only needed for non-local providers
-      
-      # Chunking
-      max_chunk_tokens: 1500              # Split oversized sections
-      merge_short_chunks: true            # Merge tiny sections into parent
-      min_chunk_tokens: 50                # Threshold for "too short"
-      
-      # Output
-      db_path: site/llmkdocs.db           # Where to write the sqlite-vss DB
-      generate_llms_txt: true             # Also produce llms.txt / llms-full.txt
-      
-      # MCP server config (written to site/llmkdocs-mcp.json)
-      mcp_server:
-        transport: stdio                  # stdio | sse (future)
-        default_top_k: 5
+```bash
+# Zero-config start — all defaults, just point at your docs
+npx llmkdocs --docs ./docs/
+
+# With options
+npx llmkdocs \
+  --docs ./docs/ \
+  --db ./llmkdocs.db \
+  --embedding-provider openai \
+  --max-chunk-tokens 1500
 ```
 
-### Minimal Config (Zero-Config Start)
+### Config File (optional)
 
-```yaml
-plugins:
-  - llmkdocs
+For projects that want persistent config, create `llmkdocs.config.json` in the docs root:
+
+```json
+{
+  "docs": "./docs",
+  "db": "./llmkdocs.db",
+  "embedding": {
+    "provider": "local",
+    "model": "all-MiniLM-L6-v2"
+  },
+  "chunking": {
+    "maxTokens": 1500,
+    "mergeShort": true,
+    "minTokens": 50
+  },
+  "mcp": {
+    "transport": "stdio",
+    "defaultTopK": 5
+  }
+}
 ```
 
-That's it. All defaults apply: local embeddings, 1500 max tokens, DB written to `site/llmkdocs.db`. **No API key required.**
+### Minimal Start (Zero Config)
 
-### MCP Server Config (for LLM clients)
+```bash
+npx llmkdocs --docs ./docs/
+```
+
+That's it. All defaults apply: local ONNX embeddings, 1500 max tokens, DB written alongside the docs directory. **No API key, no config file, no Python required.**
+
+### MCP Client Config (for Cursor, Claude Desktop, OpenClaw, etc.)
 
 ```json
 {
   "mcpServers": {
     "llmkdocs": {
       "command": "npx",
-      "args": ["llmkdocs-mcp", "--db", "./site/llmkdocs.db"],
+      "args": ["llmkdocs", "--docs", "./path/to/docs"],
       "transport": "stdio"
     }
   }
@@ -370,92 +428,61 @@ That's it. All defaults apply: local embeddings, 1500 max tokens, DB written to 
 
 ## Deployment & Access Model
 
-### How It Works: Local-First (v1)
+### How It Works: Self-Managing MCP Server (v1)
 
-The v1 deployment model is **local-first.** The plugin runs wherever you build your docs, and the MCP server runs wherever your agents run — typically the same machine.
+The v1 deployment model is **local, self-managing, zero-config.** The MCP server runs on the same machine as your agents, watches your docs directory, and handles all indexing automatically. There is no separate build step, no CI pipeline for the DB, and no manual sync.
 
 ```mermaid
 graph LR
     subgraph "Your Machine"
-        A[Edit markdown] --> B[mkdocs build]
-        B --> C[Static site]
-        B --> D[(llmkdocs.db)]
-        D --> E[MCP Server]
-        E --> F[AI Agent]
-        C --> G[GitHub Pages]
+        A[Docs Directory] --> B[LLMkDocs MCP Server]
+        B --> C[(sqlite-vss DB)]
+        B --> D[AI Agent]
+    end
+
+    subgraph "Existing (unchanged, independent)"
+        A --> E[mkdocs build]
+        E --> F[GitHub Pages]
     end
 ```
 
-**There is no hosted component in v1.** The vector DB is a local file. The MCP server is a local process. The static site still deploys to GitHub Pages (or wherever) as normal — that part is completely unchanged.
+**The MCP server and mkdocs are completely independent.** mkdocs builds the human-facing site. LLMkDocs indexes the same source files for agents. Neither depends on the other. You can use LLMkDocs without mkdocs, or mkdocs without LLMkDocs.
 
-### Keeping the DB Fresh
+### Keeping the DB Fresh — It's Automatic
 
-When you edit docs and rebuild, the DB updates in place. The MCP server reads the DB on each query (no caching in v1), so agents automatically get fresh results after a rebuild.
+The MCP server owns the entire indexing pipeline. Freshness is built in, not bolted on:
 
-**"Do I need to pull main every time docs change?"** Depends on your workflow:
+1. **File watcher** detects changes to the docs directory in real-time
+2. **Staleness check on every query** — even if the watcher misses something, the server verifies freshness before returning results
+3. **Incremental re-indexing** — only changed files are re-chunked and re-embedded. Typical latency: 200-400ms, transparent to the agent.
 
-| Scenario | How DB Stays Fresh |
-|----------|--------------------|
-| **Solo dev, local docs** | You edit and build locally. DB updates automatically. Zero friction. |
-| **Team, shared repo** | Pull latest, run `mkdocs build`. DB regenerates from source. |
-| **CI-built DB** | GitHub Actions builds the DB and commits it (or uploads as artifact). Pull to get latest. |
-| **Hosted DB (v2)** | DB pushed to cloud storage on build. MCP server reads from remote. No local sync needed. |
+**You never manually rebuild.** Edit a doc, save it, the next agent query gets fresh results. The MCP server handles everything.
 
-**For our use case (CSDLC docs, solo dev, local agents): Option 1.** You build locally, DB is right there. No syncing needed.
+### Team Workflows
 
-**For team use (GMPPU): Option 2 or 3.** Team members pull and build, or CI builds the DB for them. v2 would add hosted DB for zero-sync team access.
+| Scenario | How It Works |
+|----------|-------------|
+| **Solo dev** | MCP server watches your local docs directory. Edit and save — done. |
+| **Team, shared repo** | Each team member runs their own MCP server pointed at their local clone. `git pull` updates the source files; MCP server detects changes and re-indexes automatically. |
+| **Hosted (v2)** | Cloud-hosted MCP server with SSE transport. DB syncs on push. No local setup needed. |
 
-### Staleness Detection
-
-A real risk: the DB gets out of sync with the docs because someone forgot to rebuild after editing. LLMkDocs handles this with **two safeguards:**
-
-**1. Git hook (automatic rebuild on pull)**
-A `post-merge` git hook in the docs repo auto-runs `mkdocs build` whenever you `git pull`. You can't forget because it happens automatically.
-
-```bash
-# .git/hooks/post-merge
-#!/bin/sh
-mkdocs build --quiet
-```
-
-**2. DB freshness check (runtime warning)**
-The MCP server stores a `build_timestamp` and `source_git_commit` in the DB metadata table. On each query, it can compare against the current git state of the docs directory. If the DB is stale (docs have changed since the last build), the MCP server returns a warning alongside results:
-
-```json
-{
-  "warning": "Docs DB is 3 commits behind source. Run `mkdocs build` to update.",
-  "results": [ ... ]
-}
-```
-
-The agent can then auto-rebuild before continuing, or surface the warning to the human.
-
-**3. Session start ritual**
-In CSDLC workflows, the AI Lead's standup checklist (AGENTS.md) includes "check docs DB freshness" as a boot step. If stale, rebuild before proceeding. This is the human-process layer backing up the automated layer.
+**"Do I need to pull main when docs change?"** Yes — the MCP server watches local files, so you need `git pull` to get remote changes onto your machine. But you do NOT need to rebuild anything after pulling. The MCP server detects the file changes and re-indexes automatically.
 
 ### Branch Handling
 
-**v1: The DB reflects whatever branch you build.** Run `mkdocs build` on `main`, you get main's DB. Run it on a feature branch, you get that branch's DB. The DB is just a build artifact — it has no branch awareness.
+**v1: The MCP server indexes whatever files are on disk.** If you're on `main`, it indexes main's docs. If you switch to a feature branch, it detects the file changes and re-indexes. No manual intervention.
 
 **v2 (future):** Versioned DBs — maintain separate vector stores per branch/tag. MCP server accepts a `version` parameter. Enables agents to query docs from a specific release or compare branches.
-
-### Environments
-
-| Environment | What Happens | Deploy Trigger |
-|-------------|-------------|---------------|
-| Local (`mkdocs serve`) | Plugin watches for changes, re-chunks and re-embeds on save. MCP server runs alongside. | `mkdocs serve` |
-| CI/CD (`mkdocs build`) | Plugin builds full vector DB as a build artifact. DB can be committed, uploaded, or downloaded. | Push to main / PR merge |
-| GitHub Pages | Static site deploys as normal. **Vector DB is NOT served via Pages** — it's a separate artifact. | GitHub Actions |
 
 ### Infrastructure Dependencies
 
 | Dependency | Required? | What Breaks Without It |
 |-----------|-----------|----------------------|
-| Python + mkdocs | Yes | It's a plugin for mkdocs |
-| sqlite-vss Python extension | Yes (build-time) | Can't write vector DB |
-| sentence-transformers (default) | Yes (build-time, if using local embeddings) | Can't generate embeddings. ~80MB model download on first build, cached after. |
-| OpenAI API (if configured) | Only if `embedding_provider: openai` | Can't generate embeddings. Build fails with clear error. |
-| Node.js + sqlite-vss | Yes (MCP server runtime) | Can't run similarity search |
+| Node.js (v18+) | Yes | Runtime for the MCP server |
+| `sqlite-vss` native extension | Yes | Vector similarity search. Ships as a pre-built binary via npm for most platforms. |
+| `@huggingface/transformers` | Yes (default embeddings) | Local ONNX model inference. ~80MB model download on first run, cached after. |
+| OpenAI API key | Only if `embedding_provider: openai` | Optional upgrade for higher-quality embeddings. |
+| Python / mkdocs | **No** | LLMkDocs is fully independent. mkdocs is only needed if you want the human-facing site. |
 
 ---
 
@@ -463,9 +490,8 @@ In CSDLC workflows, the AI Lead's standup checklist (AGENTS.md) includes "check 
 
 ### API Key Management
 
-- **Default config requires zero API keys.** Local embeddings model runs entirely offline.
-- If a cloud provider is configured, API keys are referenced by environment variable name — **never** stored in config files.
-- The MCP server does **not** need API keys — it only reads the pre-built DB.
+- **Default config requires zero API keys.** Local ONNX embeddings model runs entirely offline.
+- If a cloud provider is configured (OpenAI, Bedrock), API keys are referenced by environment variable name — **never** stored in config files.
 
 ### Data Sensitivity
 
@@ -496,12 +522,11 @@ LLMkDocs doesn't manage access control — it inherits whatever access model you
 
 | Concern | Summary | Affected Areas |
 |---------|---------|---------------|
-| **Embedding model portability** | DB stores model name + dimensions in metadata. Switching models requires full re-embed (detected automatically). | Chunker, Embedding Provider, DB schema |
+| **Embedding model portability** | DB stores model name + dimensions in metadata. Switching models requires full re-embed (detected automatically). | Embedder, DB schema |
 | **Chunk quality** | Bad chunks = bad retrieval. This is the single biggest quality lever. | Chunker, all MCP tools |
-| **Two-language split** | Python plugin + TypeScript MCP server adds complexity. Shared contract is the DB schema. | Build system, MCP server, testing |
-| **sqlite-vss portability** | C extension — needs to compile on target platform. May be friction on some systems. | Installation, CI |
-| **First build model download** | Default local model is ~80MB. First build takes longer (download + cache). Subsequent builds are fast. | DX, CI caching |
-| **DB staleness** | If docs change but the DB isn't rebuilt, agents query stale content. Mitigated by git hooks, runtime freshness checks, and session start rituals. | MCP Server, Deployment, AGENTS.md |
+| **sqlite-vss portability** | C extension — needs pre-built binaries for target platform. May be friction on exotic systems. | Installation, npm packaging |
+| **First-run model download** | Default local model is ~80MB. First startup takes longer (download + cache + full index). Subsequent startups are near-instant. | DX, offline scenarios |
+| **DB freshness** | Handled automatically by file watcher + staleness checks. No manual intervention needed. | MCP server core loop |
 
 ---
 
@@ -511,27 +536,26 @@ LLMkDocs doesn't manage access control — it inherits whatever access model you
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| sqlite-vss installation friction (C extension compilation) | Medium | High (blocks adoption) | Ship pre-built wheels, document fallbacks. Consider ChromaDB as alternative backend. |
-| sentence-transformers dependency size (~500MB with PyTorch) | Medium | Medium (slow first install) | Document the weight. Consider ONNX runtime for lighter inference. |
+| sqlite-vss installation friction (native extension) | Medium | High (blocks adoption) | Ship pre-built binaries via npm for major platforms (macOS, Linux, Windows). Document manual build fallback. |
+| ONNX model inference performance on low-end hardware | Low | Medium | MiniLM is lightweight (~80MB). If too slow, offer OpenAI fallback. Benchmark on CI runners. |
 | Embedding model changes break existing DBs | Low | Medium | Store model name + dimensions in DB metadata. Detect mismatch and prompt full re-embed. |
-| Chunk quality is poor for unusual doc structures | Medium | High (core value prop) | Extensive testing with real-world docs. Configurable chunking params. |
-| Two-language maintenance burden | Medium | Medium | Clear contract (DB schema). Separate test suites. Consider all-TS rewrite if Python side stays thin. |
+| Chunk quality is poor for unusual doc structures | Medium | High (core value prop) | Extensive testing with real-world docs (our CSDLC docs, QuoteAI). Configurable chunking params. |
+| File watcher misses changes (OS-level edge cases) | Low | Low | Staleness check on every query as backup. File watcher is optimization, not sole mechanism. |
 
 ### Known Limitations (v1)
 
-- **mkdocs only** — no Sphinx, Docusaurus, VitePress support
+- **Markdown only** — no Word docs, PDFs, or other formats (v2 could add format adapters)
 - **Local MCP only** — stdio transport, no remote/hosted access
 - **Read-only** — no write tools, agents can't create/update docs via MCP
-- **No branch awareness** — DB reflects whatever branch was built, no version switching
-- **No per-page access control** — all docs in the mkdocs project are indexed, or none
+- **No branch awareness** — DB reflects whatever files are on disk, no version switching
+- **No per-file access control** — all files in the docs directory are indexed, or none
 - **English-optimized** — embedding models work best with English. Multilingual is possible but untested.
-- **No incremental watch mode for MCP server** — if DB is rebuilt, MCP server reads stale data until next query (acceptable for v1 since reads are per-query, not cached)
 
 ### Tech Debt (Accepted for MVP)
 
-- No caching layer between DB and MCP server (fine for local, problem for hosted)
-- Only two embedding providers implemented (local + OpenAI). Interface exists for more.
-- llms.txt generation may be deferred (separate code path from chunker)
+- No caching layer for query results (fine for local, problem at scale)
+- Only two embedding providers implemented (local ONNX + OpenAI). Interface exists for more.
+- Markdown-only format support. Format adapter interface not yet abstracted.
 
 ---
 
@@ -539,29 +563,31 @@ LLMkDocs doesn't manage access control — it inherits whatever access model you
 
 | Epic | Doc | Status | Summary |
 |------|-----|--------|---------|
-| E1: Core Plugin & Chunker | [link](epics/core-plugin.md) | Not started | mkdocs plugin skeleton, heading-based chunker, sqlite-vss writer |
-| E2: Embedding Pipeline | [link](epics/embedding-pipeline.md) | Not started | Provider abstraction, local model (default), OpenAI (optional), diff-based re-embedding |
-| E3: MCP Server | [link](epics/mcp-server.md) | Not started | TypeScript MCP server, 4 tools, stdio transport |
-| E4: llms.txt Generation | [link](epics/llms-txt.md) | **Deferred to v2** | Auto-generate llms.txt and llms-full.txt — not needed for v1 (MCP is the primary interface) |
-| E5: Developer Experience | [link](epics/developer-experience.md) | Not started | CLI commands, status output, error messages, README, quickstart |
+| E1: Core Server, Chunker & Embedder | [link](epics/core-server.md) | Not started | MCP server skeleton, markdown chunker, ONNX embedder, sqlite-vss storage, file watcher, auto-reindexing |
+| E2: MCP Tools & Query Layer | [link](epics/mcp-tools.md) | Not started | 4 MCP tools (`search_docs`, `get_page`, `get_section`, `list_pages`), relevance scoring, metadata enrichment |
+| E3: Developer Experience | [link](epics/developer-experience.md) | Not started | CLI interface, config file support, status output, error messages, README, quickstart guide |
+
+### Deferred to v2
+
+| Epic | Summary |
+|------|---------|
+| E4: llms.txt Generation | Auto-generate llms.txt and llms-full.txt for non-MCP clients |
+| E5: Format Adapters | Support for Word docs, PDFs, RST, and other non-markdown formats |
+| E6: Cloud Sync & Hosted MCP | Remote DB hosting, SSE transport, team sharing |
 
 ### Dependency Graph
 
 ```mermaid
 graph LR
-    E1[E1: Core Plugin & Chunker] --> E2[E2: Embedding Pipeline]
-    E2 --> E3[E3: MCP Server]
-    E1 -.-> E4[E4: llms.txt Generation]
-    E3 --> E5[E5: Developer Experience]
-    E4 -.-> E5
+    E1[E1: Core Server, Chunker & Embedder] --> E2[E2: MCP Tools & Query Layer]
+    E2 --> E3[E3: Developer Experience]
 ```
 
-- **E1 → E2** is serial (need chunks before you can embed them)
-- **E2 → E3** is serial (need a populated DB before MCP server can query it)
-- **E4** is deferred to v2 (llms.txt not needed for v1)
-- **E5** is last (polishes the entire pipeline)
+- **E1 → E2** is serial (need the indexing pipeline before you can query it)
+- **E2 → E3** is serial (need working tools before you polish the DX)
+- Clean serial pipeline — **3 epics for MVP**
 
-**MVP critical path:** E1 → E2 → E3 → E5 (4 epics, serial)
+**The simplification:** Since the MCP server now owns everything (no separate plugin, no separate build step), E1 and E2 from the old architecture merge conceptually. The chunker, embedder, and DB writer are all internal to the server. E2 is the query/tool layer on top.
 
 ---
 
@@ -583,7 +609,9 @@ graph LR
 | 2026-03-28 | v1 has no branch awareness | DB reflects whatever branch is built. Versioned DBs deferred to v2. | Multi-branch support (rejected: complexity not justified for solo/small team use) |
 | 2026-03-28 | Defer llms.txt to v2 | v1 targets MCP-capable clients (OpenClaw, Cursor, Claude Desktop). llms.txt serves non-MCP clients we're not targeting yet. | Include in v1 (rejected: extra code path, no immediate consumer) |
 | 2026-03-28 | No MCP write tools | Agents already have filesystem access for writing docs. MCP write adds indirection without capability. Read-only is cleaner. | Read-write MCP (rejected: moot for local agents, scope creep toward docs CMS) |
-| 2026-03-28 | Staleness detection (git hook + runtime check) | Forgetting to rebuild is a real risk. Git hooks automate it, runtime checks catch edge cases. | Manual rebuild only (rejected: humans forget), auto-rebuild on query (rejected: too magical, unexpected build times) |
+| 2026-03-28 | Self-managing MCP server (auto-index, file watcher) | Eliminates manual rebuild step entirely. File watcher + staleness check on query = always-fresh DB. | Manual rebuild (rejected: humans forget), git hooks (rejected: unnecessary if server handles it), CI-built DB (rejected: adds sync complexity) |
+| 2026-03-28 | Decouple from mkdocs entirely | MCP server reads markdown files directly — no mkdocs dependency. Works with any docs directory. Massively expands addressable market. | mkdocs plugin (rejected: couples to one ecosystem, limits to Python users, requires separate MCP server process) |
+| 2026-03-28 | All-TypeScript, single process | ONNX runtime in Node.js eliminates Python dependency. One language, one install, one process. | Python + TypeScript split (rejected: two languages, two installs, shared state via file was fragile) |
 
 ---
 
