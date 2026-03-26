@@ -58,8 +58,10 @@ nav:
         - Nesting: projects/routr/epics/nesting.md
         - Assembly & Joints: projects/routr/epics/assembly-joints.md
         - Validation Pipeline: projects/routr/epics/validation.md
-    - LLMkDocs:
-      - Design: projects/llmkdocs/design.md
+    - Anvil:
+      - Design: projects/anvil/design.md
+      - Epics:
+        - "E1: Core Server": projects/anvil/epics/core-server.md
 
 markdown_extensions:
   - admonition
