@@ -1202,6 +1202,37 @@ graph TD
 
 ---
 
+## Future Work: MCP Tool Surface Expansion
+
+*Captured March 25, 2026 — context: protagonist/antagonist agentic testing pattern.*
+
+The current 12-tool surface is write-heavy (create, set, generate). For the antagonist agent pattern to work effectively, we need **read-back, mutation, and chaos tools**. The protagonist needs tools to build; the antagonist needs tools to inspect, mutate, and break.
+
+### Proposed Additional Tools
+
+| Tool | Category | Rationale |
+|------|----------|-----------|
+| `clear_project` / `undo` | State Management | Reset between adversarial runs without full page reload |
+| `get_shape` / `list_shapes` | Read-back | Antagonist needs to verify mutations took effect, inspect current state at shape level |
+| `resize_board` / `move_shape` | Mutation | Current tools only create — need to modify existing objects for regression testing |
+| `delete_shape` | Chaos | What happens with zero shapes? With overlapping deletions? Edge cases. |
+| `get_tool_settings` | Read-back | Verify settings were applied correctly (complement to `set_tool_settings`) |
+| `import_svg` | Design Input | Deferred from F2 — antagonist would throw malformed/complex SVGs. Requires `window.__routr` wiring first. |
+| `set_tab` / `navigate` | Navigation | Switch tabs programmatically — test cross-tab state consistency |
+
+### Guiding Principle
+
+**Protagonist = write tools (build projects, generate output). Antagonist = read + chaos tools (inspect state, mutate, break things).** The current surface is ~80% protagonist. Expanding read-back and mutation tools enables the adversarial testing pattern described in the epic design notes.
+
+### Implementation Notes
+
+- Each new tool needs a corresponding `window.__routr` method in the devApi
+- Read-back tools (`get_shape`, `list_shapes`, `get_tool_settings`) are thin — just expose existing Zustand state
+- Mutation tools (`resize_board`, `move_shape`, `delete_shape`) need new store actions
+- Scope as a follow-up epic or add incrementally as the antagonist pattern is validated
+
+---
+
 ## Known Issues / Tech Debt
 
 | Issue | Severity | Notes |
