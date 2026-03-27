@@ -31,6 +31,7 @@ theme:
 nav:
   - Home: index.md
   - Methodology:
+    - "The CSDLC Thesis": methodology/thesis.md
     - CSDLC Process: methodology/process.md
     - Core Values: methodology/core-values.md
     - Applying CSDLC: methodology/applying-csdlc.md
