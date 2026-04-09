@@ -27,7 +27,7 @@ npm run build        # Must succeed
 npm test -- --run    # Must pass ALL tests (existing + new)
 ```
 
-### Integration Tests *(If Configured)*
+### Integration Tests
 
 If the project has integration tests, run them before submitting:
 
